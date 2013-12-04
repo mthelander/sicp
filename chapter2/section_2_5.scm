@@ -389,7 +389,7 @@
               (error "No method for these types"
                      (list op type-tags)))))))
 
-;; (define (exp x y) (apply-generic 'exp x y))
+(define (exp x y) (apply-generic 'exp x y))
 
 ;; (put 'exp '(scheme-number scheme-number)
 ;;      (lambda (x y) (tag (expt x y))))
@@ -1112,7 +1112,7 @@
 (mul (make-polynomial-dense 'x '(3 5 0 6  9 -2))
      (make-polynomial-dense 'x '(3 5 0 6  9 -2))) ; (polynomial x (9 30 25 36 114 78 16 108 -36 4))
 
-; Exercise 2.91 ------------------------------------------------------------------------------
+; Exercise 2.91 -----------------------------------------------------------------------------
 
 (define (install-polynomial-sparse-package)
   (define (make-poly variable term-list)
@@ -1201,11 +1201,19 @@
 
   (define (div-poly p1 p2)
     (if (same-variable? (variable p1) (variable p2))
-  	(div-terms (term-list p1) (term-list p2))
+	(let* ((result (div-terms (term-list p1) (term-list p2)))
+	       (quotient (car result))
+	       (remainder (cadr result))
+	       (var (variable p1)))
+	  (list (make-poly var quotient) (make-poly var remainder)))
   	(error "Cannot divide polynomials of different terms" (list p1 p2))))
 
   (put 'div '(sparse sparse)
-       (lambda (p1 p2) (tag (div-poly p1 p2))))
+       (lambda (p1 p2)
+       	 (let* ((result (div-poly p1 p2))
+       		(quotient (car result))
+       		(remainder (cadr result)))
+       	   (list (tag quotient) (tag remainder)))))
 
   ; ==========================================================================================
 
@@ -1331,11 +1339,19 @@
 
   (define (div-poly p1 p2)
     (if (same-variable? (variable p1) (variable p2))
-  	(div-terms (term-list p1) (term-list p2) 0)
+	(let* ((result (div-terms (term-list p1) (term-list p2)))
+	       (quotient (car result))
+	       (remainder (cadr result))
+	       (var (variable p1)))
+	  (list (make-poly var quotient) (make-poly var remainder)))
   	(error "Cannot divide polynomials of different terms" (list p1 p2))))
 
   (put 'div '(dense dense)
-       (lambda (p1 p2) (tag (div-poly p1 p2))))
+       (lambda (p1 p2)
+	 (let* ((result (div-poly p1 p2))
+		(quotient (car result))
+		(remainder (cadr result)))
+	   (list (tag quotient) (tag remainder)))))
 
   ; ==========================================================================================
 
@@ -1359,7 +1375,11 @@
   (put 'mul '(polynomial polynomial)
        (lambda (p1 p2) (tag (apply-generic 'mul p1 p2))))
   (put 'div '(polynomial polynomial)
-       (lambda (p1 p2) (tag (apply-generic 'div p1 p2))))
+       (lambda (p1 p2)
+       	 (let* ((result (apply-generic 'div p1 p2))
+       		(quotient (car result))
+       		(remainder (cadr result)))
+       	   (list (tag quotient) (tag remainder)))))
   (put 'make 'polynomial
        (lambda (type var terms)
 	 (tag ((get 'make type) var terms))))
@@ -1378,3 +1398,804 @@
 
 (div (make-polynomial-dense 'x '(1 0 0 0 0 -1))
      (make-polynomial-dense 'x '(1 0 -1)))
+
+(div (make-polynomial-sparse 'x '((5 1) (0 -1)))
+     (make-polynomial-sparse 'x '((2 1) (0 -1))))
+(div (make-polynomial-sparse 'x '((2 2) (0 2)))
+     (make-polynomial-sparse 'x '((2 1) (0 1))))
+(div (make-polynomial-sparse 'x '((4 3) (3 7) (0 6)))
+     (make-polynomial-sparse 'x '((4 .5) (3 1) (0 3))))
+
+; Exercise 2.92 ------------------------------------------------------------------------------
+; By imposing an ordering on variables, extend the polynomial package so that addition and multiplication of polynomials works for polynomials in different variables. (This is not easy!)
+
+
+;; (define (install-polynomial-sparse-package)
+;;   (define (make-poly variable term-list)
+;;     (cons variable term-list))
+;;   (define (variable p) (car p))
+;;   (define (term-list p) (cdr p))
+;;   (define (variable? x) (symbol? x))
+;;   (define (same-variable? v1 v2)
+;;     (and (variable? v1) (variable? v2) (eq? v1 v2)))
+;;   (define (adjoin-term term term-list)
+;;     (if (=zero? (coeff term))
+;; 	term-list
+;; 	(cons term term-list)))
+;;   (define (the-empty-termlist) '())
+;;   (define (first-term term-list) (car term-list))
+;;   (define (rest-terms term-list) (cdr term-list))
+;;   (define (empty-termlist? term-list) (null? term-list))
+;;   (define (make-term order coeff) (list order coeff))
+;;   (define (order term) (car term))
+;;   (define (coeff term) (cadr term))
+;;   (define (add-poly p1 p2)
+;;     (if (same-variable? (variable p1) (variable p2))
+;; 	(make-poly (variable p1)
+;; 		   (add-terms (term-list p1)
+;; 			      (term-list p2)))
+;; 	;(add-poly p1 (make-poly (variable p1)
+;; 	(error "Polys not in same var -- ADD-POLY" (list p1 p2))))
+;;   (define (mul-poly p1 p2)
+;;     (if (same-variable? (variable p1) (variable p2))
+;; 	(make-poly (variable p1)
+;; 		   (mul-terms (term-list p1)
+;; 			      (term-list p2)))
+;; 	(error "Polys not in same var -- MUL-POLY"
+;; 	       (list p1 p2))))
+;;   (define (add-terms L1 L2)
+;;     (cond ((empty-termlist? L1) L2)
+;; 	  ((empty-termlist? L2) L1)
+;; 	  (else
+;; 	   (let ((t1 (first-term L1)) (t2 (first-term L2)))
+;; 	     (cond ((> (order t1) (order t2))
+;; 		    (adjoin-term
+;; 		     t1 (add-terms (rest-terms L1) L2)))
+;; 		   ((< (order t1) (order t2))
+;; 		    (adjoin-term
+;; 		     t2 (add-terms L1 (rest-terms L2))))
+;; 		   (else
+;; 		    (adjoin-term
+;; 		     (make-term (order t1)
+;; 				(add (coeff t1) (coeff t2)))
+;; 		     (add-terms (rest-terms L1)
+;; 				(rest-terms L2)))))))))
+;;   (define (mul-terms L1 L2)
+;;     (if (empty-termlist? L1)
+;; 	(the-empty-termlist)
+;; 	(add-terms (mul-term-by-all-terms (first-term L1) L2)
+;; 		   (mul-terms (rest-terms L1) L2))))
+;;   (define (mul-term-by-all-terms t1 L)
+;;     (if (empty-termlist? L)
+;; 	(the-empty-termlist)
+;; 	(let ((t2 (first-term L)))
+;; 	  (adjoin-term
+;; 	   (make-term (+ (order t1) (order t2))
+;; 		      (mul (coeff t1) (coeff t2)))
+;; 	   (mul-term-by-all-terms t1 (rest-terms L))))))
+
+;;   (define (sub-terms l1 l2)
+;;     (add-terms l1 (mul-terms l2 '((0 -1)))))
+
+;;   (define (div-terms dividend divisor)
+;;     (if (empty-termlist? dividend)
+;; 	(list (the-empty-termlist) (the-empty-termlist))
+;; 	(let ((t1 (first-term dividend))
+;; 	      (t2 (first-term divisor)))
+;; 	  (if (> (order t2) (order t1))
+;; 	      (list (the-empty-termlist) dividend)
+;; 	      (let ((new-c (div (coeff t1) (coeff t2)))
+;; 		    (new-o (- (order t1) (order t2))))
+;; 		(let* ((result (make-term new-o new-c))
+;; 		       (rest-of-result
+;; 			(div-terms (sub-terms dividend (mul-terms (list result) divisor))
+;; 				   divisor)))
+;; 		  (list (adjoin-term result (car rest-of-result))
+;; 			(cadr rest-of-result))))))))
+
+  ;; (define (div-poly p1 p2)
+  ;;   (if (same-variable? (variable p1) (variable p2))
+  ;; 	(let* ((result (div-terms (term-list p1) (term-list p2)))
+  ;; 	       (quotient (car result))
+  ;; 	       (remainder (cadr result))
+  ;; 	       (var (variable p1)))
+  ;; 	  (list (make-poly var quotient) (make-poly var remainder)))
+  ;; 	(error "Cannot divide polynomials of different terms" (list p1 p2))))
+
+  ;; (put 'div '(dense dense)
+  ;;      (lambda (p1 p2)
+  ;; 	 (let* ((result (div-poly p1 p2))
+  ;; 		(quotient (car result))
+  ;; 		(remainder (cadr result)))
+  ;; 	   (list (tag quotient) (tag remainder)))))
+
+;;   (define (tag p) (attach-tag 'sparse p))
+
+;;   ; new code =================================================================================
+
+;;   (define *p1* (make-polynomial-sparse 'x '((2 (polynomial sparse y ((1 1) (0 1))))
+;; 					    (1 (polynomial sparse y ((2 1) (0 1))))
+;; 					    (0 (polynomial sparse y ((1 1) (0 -1)))))))
+
+;;   (define *p2* (make-polynomial-sparse 'y '((1 (polynomial sparse x ((1 1) (0 -2))))
+;; 					    (0 (polynomial sparse x ((3 1) (0 7)))))))
+
+;;   (define (expand-terms l)
+;;     (p l)
+;;     (p "lakjdf")
+;;     (cond ((null? l) '())
+;; 	  ((pair? (coeff l)) (cons (cdr (car l))
+;; 				   (expand-terms (cdr l))))
+;; 	  (else (cons (car l)
+;; 		      (expand-terms (cdr l))))))
+
+;;   (expand-terms (term-list (contents *p1*)))
+
+;;   ; ==========================================================================================
+
+;;   (put 'add '(sparse sparse)
+;;        (lambda (p1 p2) (tag (add-poly p1 p2))))
+;;   (put 'mul '(sparse sparse)
+;;        (lambda (p1 p2) (tag (mul-poly p1 p2))))
+;;   (put 'make 'sparse
+;;        (lambda (var terms) (tag (make-poly var terms))))
+;;   'done)
+
+;(install-polynomial-sparse-package)
+
+;(make-polynomial-sparse 'x '((2 1) (1 3) (0 5)))
+
+;(add *p1* *p2*)
+
+; ============================================================================================
+; ARGH!! INCOMPLETE
+; ============================================================================================
+
+; Exercise 2.93 ------------------------------------------------------------------------------
+
+(define (install-rational-package)
+  (define (numer x) (car x))
+  (define (denom x) (cadr x))
+  (define (make-rat n d) (list n d))
+  (define (add-rat x y)
+    (make-rat (add (mul (numer x) (denom y))
+		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (sub-rat x y)
+    (make-rat (sub (mul (numer x) (denom y))
+		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (mul-rat x y)
+    (make-rat (mul (numer x) (numer y))
+              (mul (denom x) (denom y))))
+  (define (div-rat x y)
+    (make-rat (mul (numer x) (denom y))
+              (mul (denom x) (numer y))))
+  (define (tag x) (attach-tag 'rational x))
+
+  (put 'add '(rational rational)
+       (lambda (x y) (tag (add-rat x y))))
+  (put 'sub '(rational rational)
+       (lambda (x y) (tag (sub-rat x y))))
+  (put 'mul '(rational rational)
+       (lambda (x y) (tag (mul-rat x y))))
+  (put 'div '(rational rational)
+       (lambda (x y) (tag (div-rat x y))))
+
+  (put 'make 'rational
+       (lambda (n d) (tag (make-rat n d))))
+  'done)
+
+(define (make-rational n d)
+  ((get 'make 'rational) n d))
+
+(install-rational-package)
+
+(define p1 (make-polynomial-sparse 'x '((2 1)(0 1))))
+(define p2 (make-polynomial-sparse 'x '((3 1)(0 1))))
+(define rf (make-rational p2 p1))
+
+(add rf rf) ; (2x^5 + 2x^3 + 2x^2 + 2) / (x^4 + 2x^2 + 1)
+
+; Exercise 2.94 ------------------------------------------------------------------------------
+
+(define (install-rational-package)
+  (define (numer x) (car x))
+  (define (denom x) (cadr x))
+  (define (make-rat n d)
+    (let ((g (greatest-common-divisor n d)))
+      (list (div n g) (div d g))))
+  (define (add-rat x y)
+    (make-rat (add (mul (numer x) (denom y))
+		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (sub-rat x y)
+    (make-rat (sub (mul (numer x) (denom y))
+		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (mul-rat x y)
+    (make-rat (mul (numer x) (numer y))
+              (mul (denom x) (denom y))))
+  (define (div-rat x y)
+    (make-rat (mul (numer x) (denom y))
+              (mul (denom x) (numer y))))
+  (define (tag x) (attach-tag 'rational x))
+
+  (put 'add '(rational rational)
+       (lambda (x y) (tag (add-rat x y))))
+  (put 'sub '(rational rational)
+       (lambda (x y) (tag (sub-rat x y))))
+  (put 'mul '(rational rational)
+       (lambda (x y) (tag (mul-rat x y))))
+  (put 'div '(rational rational)
+       (lambda (x y) (tag (div-rat x y))))
+
+  (put 'make 'rational
+       (lambda (n d) (tag (make-rat n d))))
+  'done)
+
+(define (make-rational n d)
+  ((get 'make 'rational) n d))
+
+(define (install-polynomial-sparse-package)
+  (define (make-poly variable term-list)
+    (cons variable term-list))
+  (define (variable p) (car p))
+  (define (term-list p) (cdr p))
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term))
+	term-list
+	(cons term term-list)))
+  (define (the-empty-termlist) '())
+  (define (first-term term-list) (car term-list))
+  (define (rest-terms term-list) (cdr term-list))
+  (define (empty-termlist? term-list) (null? term-list))
+  (define (make-term order coeff) (list order coeff))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (add-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- ADD-POLY"
+	       (list p1 p2))))
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (mul-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- MUL-POLY"
+	       (list p1 p2))))
+  (define (add-terms L1 L2)
+    (cond ((empty-termlist? L1) L2)
+	  ((empty-termlist? L2) L1)
+	  (else
+	   (let ((t1 (first-term L1)) (t2 (first-term L2)))
+	     (cond ((> (order t1) (order t2))
+		    (adjoin-term
+		     t1 (add-terms (rest-terms L1) L2)))
+		   ((< (order t1) (order t2))
+		    (adjoin-term
+		     t2 (add-terms L1 (rest-terms L2))))
+		   (else
+		    (adjoin-term
+		     (make-term (order t1)
+				(add (coeff t1) (coeff t2)))
+		     (add-terms (rest-terms L1)
+				(rest-terms L2)))))))))
+  (define (mul-terms L1 L2)
+    (if (empty-termlist? L1)
+	(the-empty-termlist)
+	(add-terms (mul-term-by-all-terms (first-term L1) L2)
+		   (mul-terms (rest-terms L1) L2))))
+  (define (mul-term-by-all-terms t1 L)
+    (if (empty-termlist? L)
+	(the-empty-termlist)
+	(let ((t2 (first-term L)))
+	  (adjoin-term
+	   (make-term (+ (order t1) (order t2))
+		      (mul (coeff t1) (coeff t2)))
+	   (mul-term-by-all-terms t1 (rest-terms L))))))
+
+  (define (sub-terms l1 l2)
+    (add-terms l1 (mul-terms l2 '((0 -1)))))
+
+  (define (div-terms dividend divisor)
+    (if (empty-termlist? dividend)
+  	(list (the-empty-termlist) (the-empty-termlist))
+  	(let ((t1 (first-term dividend))
+  	      (t2 (first-term divisor)))
+  	  (if (> (order t2) (order t1))
+  	      (list (the-empty-termlist) dividend)
+  	      (let ((new-c (div (coeff t1) (coeff t2)))
+  		    (new-o (- (order t1) (order t2))))
+  		(let* ((result (make-term new-o new-c))
+  		       (rest-of-result
+  			(div-terms (sub-terms dividend (mul-terms (list result) divisor))
+  				   divisor)))
+  		  (list (adjoin-term result (car rest-of-result))
+  			(cadr rest-of-result))))))))
+
+  (define (div-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+  	(let* ((result (div-terms (term-list p1) (term-list p2)))
+  	       (quotient (car result))
+  	       (remainder (cadr result))
+  	       (var (variable p1)))
+  	  (list (make-poly var quotient) (make-poly var remainder)))
+  	(error "Cannot divide polynomials of different terms" (list p1 p2))))
+
+  (put 'div '(sparse sparse)
+       (lambda (p1 p2)
+       	 (let* ((result (div-poly p1 p2))
+       		(quotient (car result))
+       		(remainder (cadr result)))
+       	   (list (tag quotient) (tag remainder)))))
+
+  (define (tag p) (attach-tag 'sparse p))
+
+  (put 'add '(sparse sparse)
+       (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put 'mul '(sparse sparse)
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'make 'sparse
+       (lambda (var terms) (tag (make-poly var terms))))
+
+  ; new code =================================================================================
+  
+  (define (gcd-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1) (gcd-terms (term-list p1) (term-list p2)))
+	(error "Cannot gcd polynomials of different terms" (list p1 p2))))
+
+  (define (gcd-terms a b)
+    (if (empty-termlist? b) a
+	(gcd-terms b (remainder-terms a b))))
+
+  (define (remainder-terms a b)
+    (cadr (div-terms a b)))
+
+  (put 'greatest-common-divisor '(polynomial polynomial)
+       (lambda (p1 p2)
+	 (attach-tag 'polynomial (greatest-common-divisor p1 p2))))
+  (put 'greatest-common-divisor '(sparse sparse)
+       (lambda (p1 p2) (tag (gcd-poly p1 p2))))
+  (put 'greatest-common-divisor '(scheme-number scheme-number) gcd)
+
+  ; ==========================================================================================
+
+  'done)
+
+(define (greatest-common-divisor p1 p2)
+  (apply-generic 'greatest-common-divisor p1 p2))
+
+(install-rational-package)
+(install-polynomial-sparse-package)
+
+(define p1 (make-polynomial-sparse 'x '((4 1) (3 -1) (2 -2) (1 2))))
+(define p2 (make-polynomial-sparse 'x '((3 1) (1 -1))))
+
+;(greatest-common-divisor p1 p2) ; (polynomial sparse (2 -1) (1 1)) ; Should be x^2 - x according to wolfram?
+
+;; (greatest-common-divisor (make-polynomial-sparse 'x '((2 1) (1 7) (0 6)))
+;; 			 (make-polynomial-sparse 'x '((2 1) (1 -5) (0 -6))))
+
+(greatest-common-divisor (make-polynomial-sparse 'x '((4 1) (3 -1) (2 -2) (1 2)))
+			 (make-polynomial-sparse 'x '((3 1) (1 -1))))
+
+;; (div (make-polynomial-sparse 'x '((2 1) (1 7) (0 6)))
+;;      (make-polynomial-sparse 'x '((2 1) (1 -5) (0 -6))))
+
+; Exercise 2.95 -----------------------------------------------------------------------------
+
+(define P1 (make-polynomial-sparse 'x '((2 1) (1 -2) (0 1))))
+(define P2 (make-polynomial-sparse 'x '((2 11) (0 7))))
+(define P3 (make-polynomial-sparse 'x '((1 13) (0 5))))
+(define Q1 (mul p1 p2))
+(define Q2 (mul p1 p3))
+
+(greatest-common-divisor Q1 Q2) ; (polynomial sparse x (2 1458/169) (1 -2916/169) (0 1458/169))
+
+; Exercise 2.96 -----------------------------------------------------------------------------
+
+(define (install-polynomial-sparse-package)
+  (define (make-poly variable term-list)
+    (cons variable term-list))
+  (define (variable p) (car p))
+  (define (term-list p) (cdr p))
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term))
+	term-list
+	(cons term term-list)))
+  (define (the-empty-termlist) '())
+  (define (first-term term-list) (car term-list))
+  (define (rest-terms term-list) (cdr term-list))
+  (define (empty-termlist? term-list) (null? term-list))
+  (define (make-term order coeff) (list order coeff))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (add-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- ADD-POLY"
+	       (list p1 p2))))
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (mul-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- MUL-POLY"
+	       (list p1 p2))))
+  (define (add-terms L1 L2)
+    (cond ((empty-termlist? L1) L2)
+	  ((empty-termlist? L2) L1)
+	  (else
+	   (let ((t1 (first-term L1)) (t2 (first-term L2)))
+	     (cond ((> (order t1) (order t2))
+		    (adjoin-term
+		     t1 (add-terms (rest-terms L1) L2)))
+		   ((< (order t1) (order t2))
+		    (adjoin-term
+		     t2 (add-terms L1 (rest-terms L2))))
+		   (else
+		    (adjoin-term
+		     (make-term (order t1)
+				(add (coeff t1) (coeff t2)))
+		     (add-terms (rest-terms L1)
+				(rest-terms L2)))))))))
+  (define (mul-terms L1 L2)
+    (if (empty-termlist? L1)
+	(the-empty-termlist)
+	(add-terms (mul-term-by-all-terms (first-term L1) L2)
+		   (mul-terms (rest-terms L1) L2))))
+  (define (mul-term-by-all-terms t1 L)
+    (if (empty-termlist? L)
+	(the-empty-termlist)
+	(let ((t2 (first-term L)))
+	  (adjoin-term
+	   (make-term (+ (order t1) (order t2))
+		      (mul (coeff t1) (coeff t2)))
+	   (mul-term-by-all-terms t1 (rest-terms L))))))
+
+  (define (sub-terms l1 l2)
+    (add-terms l1 (mul-terms l2 '((0 -1)))))
+
+  (define (div-terms dividend divisor)
+    (if (empty-termlist? dividend)
+  	(list (the-empty-termlist) (the-empty-termlist))
+  	(let ((t1 (first-term dividend))
+  	      (t2 (first-term divisor)))
+  	  (if (> (order t2) (order t1))
+  	      (list (the-empty-termlist) dividend)
+  	      (let ((new-c (div (coeff t1) (coeff t2)))
+  		    (new-o (- (order t1) (order t2))))
+  		(let* ((result (make-term new-o new-c))
+  		       (rest-of-result
+  			(div-terms (sub-terms dividend (mul-terms (list result) divisor))
+  				   divisor)))
+  		  (list (adjoin-term result (car rest-of-result))
+  			(cadr rest-of-result))))))))
+
+  (define (div-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+  	(let* ((result (div-terms (term-list p1) (term-list p2)))
+  	       (quotient (car result))
+  	       (remainder (cadr result))
+  	       (var (variable p1)))
+  	  (list (make-poly var quotient) (make-poly var remainder)))
+  	(error "Cannot divide polynomials of different terms" (list p1 p2))))
+
+  (put 'div '(sparse sparse)
+       (lambda (p1 p2)
+       	 (let* ((result (div-poly p1 p2))
+       		(quotient (car result))
+       		(remainder (cadr result)))
+       	   (list (tag quotient) (tag remainder)))))
+
+  (define (tag p) (attach-tag 'sparse p))
+
+  (put 'add '(sparse sparse)
+       (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put 'mul '(sparse sparse)
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'make 'sparse
+       (lambda (var terms) (tag (make-poly var terms))))
+  
+  (define (gcd-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+  	(make-poly (variable p1) (gcd-terms (term-list p1) (term-list p2)))
+  	(error "Cannot gcd polynomials of different terms" (list p1 p2))))
+
+  ; new code ================================================================================
+  
+  (define (integerizing-factor P Q)
+    (let ((c (coeff Q))
+	  (O1 (order P))
+	  (O2 (order Q)))
+    (expt c (+ 1 (- O1 O2)))))
+  
+  (define (pseudoremainder-terms a b)
+    (let ((factor (integerizing-factor (first-term a) (first-term b))))
+      (cadr (div-terms (mul-term-by-all-terms (make-term 0 factor) a) b))))
+
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+	(let ((factor (apply gcd (map coeff a))))
+	  (map (lambda (t) (make-term (order t) (/ (coeff t) factor))) a))
+	(gcd-terms b (pseudoremainder-terms a b))))
+
+  ; =========================================================================================
+
+  (define (remainder-terms a b)
+    (cadr (div-terms a b)))
+
+  (put 'greatest-common-divisor '(polynomial polynomial)
+       (lambda (p1 p2)
+	 (attach-tag 'polynomial (greatest-common-divisor p1 p2))))
+  (put 'greatest-common-divisor '(sparse sparse)
+       (lambda (p1 p2) (tag (gcd-poly p1 p2))))
+  (put 'greatest-common-divisor '(scheme-number scheme-number) gcd)
+
+  'done)
+
+(install-polynomial-sparse-package)
+
+(define P1 (make-polynomial-sparse 'x '((2 1) (1 -2) (0 1))))
+(define P2 (make-polynomial-sparse 'x '((2 11) (0 7))))
+(define P3 (make-polynomial-sparse 'x '((1 13) (0 5))))
+(define Q1 (mul p1 p2))
+(define Q2 (mul p1 p3))
+
+(greatest-common-divisor Q1 Q2)
+; For a) (polynomial sparse x (2 1458) (1 -2916) (0 1458))
+; For b) (polynomial sparse x (2 1) (1 2) (0 1))
+
+; Exercise 2.97 -----------------------------------------------------------------------------
+
+(define (install-polynomial-sparse-package)
+  (define (make-poly variable term-list)
+    (cons variable term-list))
+  (define (variable p) (car p))
+  (define (term-list p) (cdr p))
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term))
+	term-list
+	(cons term term-list)))
+  (define (the-empty-termlist) '())
+  (define (first-term term-list) (car term-list))
+  (define (rest-terms term-list) (cdr term-list))
+  (define (empty-termlist? term-list) (null? term-list))
+  (define (make-term order coeff) (list order coeff))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (add-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- ADD-POLY"
+	       (list p1 p2))))
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (mul-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- MUL-POLY"
+	       (list p1 p2))))
+  (define (add-terms L1 L2)
+    (cond ((empty-termlist? L1) L2)
+	  ((empty-termlist? L2) L1)
+	  (else
+	   (let ((t1 (first-term L1)) (t2 (first-term L2)))
+	     (cond ((> (order t1) (order t2))
+		    (adjoin-term
+		     t1 (add-terms (rest-terms L1) L2)))
+		   ((< (order t1) (order t2))
+		    (adjoin-term
+		     t2 (add-terms L1 (rest-terms L2))))
+		   (else
+		    (adjoin-term
+		     (make-term (order t1)
+				(add (coeff t1) (coeff t2)))
+		     (add-terms (rest-terms L1)
+				(rest-terms L2)))))))))
+  (define (mul-terms L1 L2)
+    (if (empty-termlist? L1)
+	(the-empty-termlist)
+	(add-terms (mul-term-by-all-terms (first-term L1) L2)
+		   (mul-terms (rest-terms L1) L2))))
+  (define (mul-term-by-all-terms t1 L)
+    (if (empty-termlist? L)
+	(the-empty-termlist)
+	(let ((t2 (first-term L)))
+	  (adjoin-term
+	   (make-term (+ (order t1) (order t2))
+		      (mul (coeff t1) (coeff t2)))
+	   (mul-term-by-all-terms t1 (rest-terms L))))))
+
+  (define (sub-terms l1 l2)
+    (add-terms l1 (mul-terms l2 '((0 -1)))))
+
+  (define (div-terms dividend divisor)
+    (if (empty-termlist? dividend)
+  	(list (the-empty-termlist) (the-empty-termlist))
+  	(let ((t1 (first-term dividend))
+  	      (t2 (first-term divisor)))
+  	  (if (> (order t2) (order t1))
+  	      (list (the-empty-termlist) dividend)
+  	      (let ((new-c (div (coeff t1) (coeff t2)))
+  		    (new-o (- (order t1) (order t2))))
+  		(let* ((result (make-term new-o new-c))
+  		       (rest-of-result
+  			(div-terms (sub-terms dividend (mul-terms (list result) divisor))
+  				   divisor)))
+  		  (list (adjoin-term result (car rest-of-result))
+  			(cadr rest-of-result))))))))
+
+  (define (div-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+  	(let* ((result (div-terms (term-list p1) (term-list p2)))
+  	       (quotient (car result))
+  	       (remainder (cadr result))
+  	       (var (variable p1)))
+  	  (list (make-poly var quotient) (make-poly var remainder)))
+  	(error "Cannot divide polynomials of different terms" (list p1 p2))))
+
+  (put 'div '(sparse sparse)
+       (lambda (p1 p2)
+       	 (let* ((result (div-poly p1 p2))
+       		(quotient (car result))
+       		(remainder (cadr result)))
+       	   (list (tag quotient) (tag remainder)))))
+
+  (define (tag p) (attach-tag 'sparse p))
+
+  (put 'add '(sparse sparse)
+       (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put 'mul '(sparse sparse)
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'make 'sparse
+       (lambda (var terms) (tag (make-poly var terms))))
+  
+  (define (gcd-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+  	(make-poly (variable p1) (gcd-terms (term-list p1) (term-list p2)))
+  	(error "Cannot gcd polynomials of different terms" (list p1 p2))))
+
+  (define (integerizing-factor P Q)
+    (let ((c (coeff Q))
+	  (O1 (order P))
+	  (O2 (order Q)))
+    (expt c (+ 1 (- O1 O2)))))
+  
+  (define (pseudoremainder-terms a b)
+    (let ((factor (integerizing-factor (first-term a) (first-term b))))
+      (cadr (div-terms (mul-term-by-all-terms (make-term 0 factor) a) b))))
+
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+	(let ((factor (apply gcd (map coeff a))))
+	  (map (lambda (t) (make-term (order t) (/ (coeff t) factor))) a))
+	(gcd-terms b (pseudoremainder-terms a b))))
+
+  ; new code ================================================================================
+
+  (define (max-term . l)
+    (reduce-right (lambda (x a) (if (> (order x) (order a)) x a)) '(0 0) l))
+
+  (define (reduce-terms n d)
+    (let* ((the-gcd (gcd-terms n d))
+	   (factor (integerizing-factor (max-term (first-term n) (first-term d))
+					(first-term the-gcd)))
+	   (factor-term (make-term 0 factor)))
+      (map (lambda (tlist)
+	     (car
+	      (div-terms (mul-term-by-all-terms factor-term tlist)
+			 the-gcd)))
+	   (list n d))))
+
+  (define (reduce-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(let ((result (reduce-terms (term-list p1) (term-list p2))))
+	  (list (make-poly (variable p1) (car result))
+		(make-poly (variable p2) (cadr result))))
+	(error "Polys not in same var -- ADD-POLY" (list p1 p2))))
+  
+  (define (reduce-integers n d)
+    (let ((g (gcd n d)))
+      (list (/ n g) (/ d g))))
+  
+  (put 'reduce '(polynomial polynomial)
+       (lambda (p1 p2) (map (lambda (x) (attach-tag 'polynomial x)) (reduce p1 p2))))
+  (put 'reduce '(sparse sparse)
+       (lambda (p1 p2) (map tag (reduce-poly p1 p2))))
+  (put 'reduce '(scheme-number scheme-number) reduce-integers)
+
+  ; =========================================================================================
+
+  (define (remainder-terms a b)
+    (cadr (div-terms a b)))
+
+  (put 'greatest-common-divisor '(polynomial polynomial)
+       (lambda (p1 p2)
+	 (attach-tag 'polynomial (greatest-common-divisor p1 p2))))
+  (put 'greatest-common-divisor '(sparse sparse)
+       (lambda (p1 p2) (tag (gcd-poly p1 p2))))
+  (put 'greatest-common-divisor '(scheme-number scheme-number) gcd)
+
+  'done)
+
+(define (install-rational-package)
+  (define (numer x) (car x))
+  (define (denom x) (cadr x))
+
+  ; new code ====================================================================================
+
+  (define (make-rat n d)
+    (reduce n d))
+
+  ; =============================================================================================
+
+  (define (add-rat x y)
+    (make-rat (add (mul (numer x) (denom y))
+  		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (sub-rat x y)
+    (make-rat (sub (mul (numer x) (denom y))
+  		   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (mul-rat x y)
+    (make-rat (mul (numer x) (numer y))
+              (mul (denom x) (denom y))))
+  (define (div-rat x y)
+    (make-rat (mul (numer x) (denom y))
+              (mul (denom x) (numer y))))
+  (define (tag x) (attach-tag 'rational x))
+
+  (put 'add '(rational rational)
+       (lambda (x y) (tag (add-rat x y))))
+  (put 'sub '(rational rational)
+       (lambda (x y) (tag (sub-rat x y))))
+  (put 'mul '(rational rational)
+       (lambda (x y) (tag (mul-rat x y))))
+  (put 'div '(rational rational)
+       (lambda (x y) (tag (div-rat x y))))
+
+  (put 'make 'rational
+       (lambda (n d) (tag (make-rat n d))))
+  'done)
+
+; new code ======================================================================================
+
+(define (reduce a b)
+  (apply-generic 'reduce a b))
+
+; ===============================================================================================
+
+(install-polynomial-sparse-package)
+(install-rational-package)
+
+(define p1 (make-polynomial-sparse 'x '((1 1) (0 1))))
+(define p2 (make-polynomial-sparse 'x '((3 1) (0 -1))))
+(define p3 (make-polynomial-sparse 'x '((1 1))))
+(define p4 (make-polynomial-sparse 'x '((2 1)(0 -1))))
+
+(define rf1 (make-rational p1 p2))
+(define rf2 (make-rational p3 p4))
+
+(add rf1 rf2)
+;; Why are all the terms negative???
+;; (rational (polynomial sparse x (3 -1) (2 -2) (1 -3) (0 -1))
+;; 	     (polynomial sparse x (4 -1) (3 -1) (1 1)  (0 1)))
