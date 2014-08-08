@@ -23,6 +23,8 @@
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
         ((if? exp) (eval-if exp env))
+	((and? exp) (eval-and (operands exp) env))
+	((or? exp) (eval-or (operands exp) env))
         ((lambda? exp)
          (make-procedure (lambda-parameters exp)
                          (lambda-body exp)
@@ -50,6 +52,31 @@
          (error
           "Unknown procedure type -- APPLY" procedure))))
 
+
+; CODE I WROTE
+
+(define (and? exp) (tagged-list? exp 'and))
+(define (or? exp) (tagged-list? exp 'or))
+
+(define (eval-and exp env)
+  (if (null? exp)
+      'false
+      (let ((val (eval (first-exp exp) env)))
+	(if (true? val)
+	    (if (last-exp? exp)
+		val
+		(eval-and (rest-exps exp) env))
+	    'false))))
+
+(define (eval-or exp env)
+  (if (null? exp)
+      'false
+      (let ((val (eval (first-exp exp) env)))
+	(if (true? val)
+	    val
+	    (eval-or (rest-exps exp) env)))))
+
+; /CODE I WROTE
 
 (define (list-of-values exps env)
   (if (no-operands? exps)
