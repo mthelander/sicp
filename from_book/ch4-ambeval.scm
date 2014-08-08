@@ -292,6 +292,7 @@
         (list 'eq? eq?)
 	(list 'random random)
 	(list 'even? even?)
+	(list 'pp pp)
 ;;      more primitives
         ))
 
