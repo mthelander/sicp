@@ -195,27 +195,20 @@
 (assign val (op *) 3 2)              ; val: 6
 (goto fact-done)                     ; Done.
 
-;; Simulating (fib 4):
+;; Simulating (fib 3)
 
 (assign continue (label fib-done))     ; continue: fib-done
-(test (op <) 4 2)                      ; false
+(test (op <) 3 2)                      ; false
 (save continue)                        ; cstack: (fib-done)
 (assign continue (label afterfib-n-1)) ; continue: afterfib-n-1
-(save n)                               ; nstack: (4)
-(assign n (op -) 4 1)                  ; n: 3
-(goto (label fib-loop))
-
-(test (op <) 3 2)                      ; false
-(save continue)                        ; cstack: (fib-done afterfib-n-1)
-(assign continue (label afterfib-n-1)) ; continue: afterfib-n-1
-(save n)                               ; nstack: (4 3)
+(save n)                               ; nstack: (3)
 (assign n (op -) 3 1)                  ; n: 2
 (goto (label fib-loop))
 
 (test (op <) 2 2)                      ; false
-(save continue)                        ; cstack: (fib-done afterfib-n-1 afterfib-n-1)
+(save continue)                        ; cstack: (fib-done afterfib-n-1)
 (assign continue (label afterfib-n-1)) ; continue: afterfib-n-1
-(save n)                               ; nstack: (4 3 2)
+(save n)                               ; nstack: (3 2)
 (assign n (op -) 2 1)                  ; n: 1
 (goto (label fib-loop))
 
@@ -225,10 +218,10 @@
 (assign val 1)                         ; val: 1
 (goto afterfib-n-1)
 
-(restore n)                            ; nstack: (4 3), n: 2
-(restore continue)                     ; cstack: (fib-done afterfib-n-1), continue: afterfib-n-1
+(restore n)                            ; nstack: (3), n: 2
+(restore continue)                     ; cstack: (fib-done), continue: afterfib-n-1
 (assign n (op -) 2 2)                  ; n: 0
-(save continue)                        ; cstack: (fib-done afterfib-n-1 afterfib-n-1 afterfib-n-1)
+(save continue)                        ; cstack: (fib-done afterfib-n-1)
 (assign continue (label afterfib-n-2)) ; continue: afterfib-n-2
 (save val)                             ; vstack: (1)
 (goto (label fib-loop))
@@ -238,32 +231,32 @@
 
 (assign val 0)                         ; val: 0
 (goto afterfib-n-2)
+
 (assign n 0)                           ; n: 0
 (restore val)                          ; vstack: (), val: 1
-(restore continue)                     ; cstack: (fib-done afterfib-n-1 afterfib-n-1), continue: afterfib-n-1
-(assign val (op +) 0 0)                ; val: 0
+(restore continue)                     ; cstack: (fib-done), continue: afterfib-n-1
+(assign val (op +) 1 0)                ; val: 1
 (goto afterfib-n-1)
-(restore n)                            ; nstack: (4), n: 3
-(restore continue)                     ; cstack: (fib-done afterfib-n-1), continue: afterfib-n-1
+
+(restore n)                            ; nstack: (), n: 3
+(restore continue)                     ; cstack: (), continue: fib-done
 (assign n (op -) 3 2)                  ; n: 1
-(save continue)                        ; cstack: (fib-done afterfib-n-1 afterfib-n-1)
+(save continue)                        ; cstack: (fib-done)
 (assign continue (label afterfib-n-2)) ; continue: afterfib-n-2
-(save val)                             ; vstack: (0)
+(save val)                             ; vstack: (1)
 (goto (label fib-loop))
 
 (test (op <) 1 2)                      ; true
 (branch (label immediate-answer))
+
 (assign val 1)                         ; val: 1
 (goto afterfib-n-2)
-(assign n 1)                           ; n: 1
-(restore val)                          ; vstack: (), val: 0
-(restore continue)                     ; cstack: (fib-done afterfib-n-1), continue: afterfib-n-2
-(assign val (op +) 0 1)                ; val: 1
-(goto afterfib-n-2)
-(assign n 1)                           ; n: 1
-(restore val)                          ; vstack: ?????
 
-;; Ugh, something went wrong. SKIP
+(assign n 1)                           ; n: 1
+(restore val)                          ; vstack: (), val: 1
+(restore continue)                     ; cstack: (), continue: fib-done
+(assign val (op +) 1 1)                ; val: 2
+(goto fib-done)
 
 ; Exercise 5.6 ------------------------------------------------------------------
 
