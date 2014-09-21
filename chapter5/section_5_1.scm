@@ -159,8 +159,8 @@
 
 ;; (controller
 ;;  expt
-;;    (assign counter n)
-;;    (assign product 1)
+;;    (assign counter (reg n))
+;;    (assign product (const 1))
 ;;  expt-iter
 ;;    (test (op =) (reg counter) (const 0))
 ;;    (branch (label expt-done))
