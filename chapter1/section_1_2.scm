@@ -228,3 +228,75 @@
 ; f(n) = f(n-1) + f(n-2)
 ; f(n+1) = f(n+1-1) + f(n+1-2) = f(n) + f(n-1)
 
+; ...
+
+; SKIP
+
+; Exercise 1.14
+
+; LOST. SKIP.
+
+; Exercise 1.15
+
+(define (cube x) (* x x x))
+(define (p x) (- (* 3 x) (* 4 (cube x))))
+(define (sine angle)
+   (if (not (> (abs angle) 0.1))
+       angle
+       (p (sine (/ angle 3.0)))))
+
+; a.
+
+; 5 times.
+
+; b.
+
+; It's O(logn) in both space and time.
+
+; Exercise 1.16
+
+(define (fast-iterative-expt b n)
+  (fast-iterative-expt-iter b n 1))
+
+(define (fast-iterative-expt-iter b n a)
+  (cond ((= n 0) a)
+	((even? n)
+	 (fast-iterative-expt-iter (square b) (/ n 2) a))
+	(else
+	 (fast-iterative-expt-iter b (- n 1) (* a b)))))
+
+(fast-iterative-expt 2 8) ; 256
+(fast-iterative-expt 8 3) ; 512
+(fast-iterative-expt 5 13) ; 1220703125
+
+; Exercise 1.17
+
+(define (double n) (+ n n))
+(define (halve n) (/ n 2))
+
+(define (fast-* a b)
+  (cond ((= b 0) 0)
+	((even? b)
+	 (double (fast-* a (halve b))))
+	(else
+	 (+ a (fast-* a (- b 1))))))
+
+(fast-* 8 9) ; 72
+(fast-* 5 7) ; 35
+(fast-* 593 1145) ; 678985
+
+; Exercise 1.18
+
+(define (fast-iterative-* a b)
+  (fast-iterative-*-iter a b 0))
+
+(define (fast-iterative-*-iter a b acc)
+  (cond ((= b 0) acc)
+	((even? b)
+	 (fast-iterative-*-iter (double a) (halve b) acc))
+	(else
+	 (fast-iterative-*-iter a (- b 1) (+ a acc)))))
+
+(fast-iterative-* 8 9) ; 72
+(fast-iterative-* 5 7) ; 35
+(fast-iterative-* 593 1145) ; 678985
