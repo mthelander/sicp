@@ -300,3 +300,43 @@
 (fast-iterative-* 8 9) ; 72
 (fast-iterative-* 5 7) ; 35
 (fast-iterative-* 593 1145) ; 678985
+
+; Exercise 1.19
+
+;; Let's use the b transformation since it's shorter:
+
+;;    T(b) = bp+aq
+;;   2T(b) = T(b)*p+T(a)*q
+;;         = (bp+aq)*p+(bq+aq+ap)*q
+;;         = (bp^2+aqp)+(bq^2+aq^2+apq)
+;; bp'+aq' = b*(p^2+q^2)+a*(2pq+q^2)
+
+;; We've converted the right side into the same form as the left side,
+;; therefore it follows that p'=p^2+q^2, and q'=2pq+q^2.
+
+(define (fib n)
+  (fib-iter 1 0 0 1 n))
+
+(define (fib-iter a b p q count)
+  (cond ((= count 0) 
+         b)
+        ((even? count)
+         (fib-iter a
+                   b
+		   (+ (square p) (square q))
+		   (+ (* 2 q p) (square q))
+                   (/ count 2)))
+        (else 
+         (fib-iter (+ (* b q) 
+                      (* a q) 
+                      (* a p))
+                   (+ (* b p) 
+                      (* a q))
+                   p
+                   q
+                   (- count 1)))))
+
+(map (lambda (n) (fib n))
+     (list 0 1 2 3 4 5 6 7 8 9 10))
+;; (0 1 1 2 3 5 8 13 21 34 55)
+
