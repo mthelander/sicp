@@ -340,3 +340,254 @@
      (list 0 1 2 3 4 5 6 7 8 9 10))
 ;; (0 1 1 2 3 5 8 13 21 34 55)
 
+; Exercise 1.20
+
+;; (define (gcd a b)
+;;   (if (= b 0)
+;;       a
+;;       (gcd b (remainder a b))))
+
+;; Applicative order:
+
+;; (gcd 206 40)
+;; (= 40 0)
+;; (gcd 40 (remainder 206 40))
+;; (= 6 0)
+;; (gcd 6 (remainder 40 6))
+;; (= 4 0)
+;; (gcd 4 (remainder 6 4))
+;; (= 2 0)
+;; (gcd 2 (remainder 4 2))
+;; (= 0 0)
+
+;; 4 remainder applications.
+
+;; Normal order:
+
+;; (gcd 206 40)
+;; (if (= 40 0)
+;;     206
+;;     (gcd 40 (remainder 206 40)))
+;; (if (= 40 0)
+;;     206
+;;     (if (= (remainder 206 40) 0)
+;; 	40
+;; 	(gcd (remainder 206 40) (remainder 40 (remainder 206 40)))))
+;; (if (= 40 0)
+;;     206
+;;     (if (= (remainder 206 40) 0)
+;; 	40
+;; 	(if (= (remainder 40 (remainder 206 40)) 0)
+;; 	    (remainder 206 40)
+;; 	    (gcd (remainder 40 (remainder 206 40))
+;; 		 (remainder (remainder 206 40)
+;; 			    (remainder 40 (remainder 206 40)))))))
+;; (if (= 40 0)
+;;     206
+;;     (if (= (remainder 206 40) 0)
+;; 	40
+;; 	(if (= (remainder 40 (remainder 206 40)) 0)
+;; 	    (remainder 206 40)
+;; 	    (if (= (remainder (remainder 206 40) (remainder 40 (remainder 206 40))) 0)
+;; 		(remainder 40 (remainder 206 40))
+;; 		(gcd (remainder (remainder 206 40) (remainder 40 (remainder 206 40)))
+;; 		     (remainder (remainder 40 (remainder 206 40))
+;; 				(remainder (remainder 206 40)
+;; 					   (remainder 40 (remainder 206 40)))))))))
+;; (if (= 40 0)
+;;     206
+;;     (if (= (remainder 206 40) 0) ; 1
+;; 	40
+;; 	(if (= (remainder 40 (remainder 206 40)) 0) ; 2
+;; 	    (remainder 206 40)
+;; 	    (if (= (remainder (remainder 206 40) (remainder 40 (remainder 206 40))) 0) ; 4
+;; 		(remainder 40 (remainder 206 40))
+;; 		(if (= (remainder (remainder 40 (remainder 206 40))
+;; 				  (remainder (remainder 206 40)
+;; 					     (remainder 40 (remainder 206 40)))) ; 7
+;; 		       0)
+;; 		    (remainder (remainder 206 40) (remainder 40 (remainder 206 40))) ; 4
+;; 		    ...)))))
+
+;; 18 invocations!
+
+; Exercise 1.21
+
+(define (smallest-divisor n)
+  (find-divisor n 2))
+
+(define (find-divisor n test-divisor)
+  (cond ((> (square test-divisor) n) 
+         n)
+        ((divides? test-divisor n) 
+         test-divisor)
+        (else (find-divisor 
+               n 
+               (+ test-divisor 1)))))
+
+(define (divides? a b)
+  (= (remainder b a) 0))
+
+(map smallest-divisor (list 199 1999 19999)) ; (1 99 1999 7)
+
+; Exercise 1.22
+
+(define (prime? n)
+  (= (smallest-divisor n) n))
+
+(define (timed-prime-test n)
+  (newline)
+  (display n)
+  (start-prime-test n (runtime)))
+(define (start-prime-test n start-time)
+  (if (prime? n)
+      (report-prime (- (runtime) 
+                       start-time))))
+(define (report-prime elapsed-time)
+  (display " *** ")
+  (display elapsed-time))
+
+(define (search-for-primes start end)
+    (cond ((even? start)
+	   (search-for-primes (+ start 1) end))
+	  ((<= start end)
+	   (timed-prime-test start)
+	   (search-for-primes (+ start 2) end))))
+
+(search-for-primes 1000 1020)
+;; 1009 *** 0.
+;; 1013 *** 0.
+;; 1019 *** 0.
+
+(search-for-primes 10000 10100)
+;; 10007 *** 0.
+;; 10009 *** 0.
+;; 10037 *** 0.
+
+(search-for-primes 100000 100100)
+;; 100003 *** 0.
+;; 100019 *** 0.
+;; 100043 *** 0.
+
+(search-for-primes 1000000 1000200)
+;; 1000003 *** 9.999999999999898e-3
+;; 1000033 *** 0.
+;; 1000037 *** 0.
+
+;; These results don't tell us much, it appears that the timer's precision isn't high enough.
+
+; Exercise 1.23
+
+(define (next n)
+  (if (= 2 n) 3 (+ 2 n)))
+
+(define (find-divisor n test-divisor)
+  (cond ((> (square test-divisor) n) n)
+        ((divides? test-divisor n) test-divisor)
+        (else (find-divisor n (next test-divisor)))))
+
+(for-each timed-prime-test
+	  (list 1009    1013    1019
+		10007   10009   10037
+		100003  100019  100043
+		1000003 1000033 1000037))
+
+; Again, we need a more granular time function to be able to answer this.
+
+
+; Exercise 1.24
+
+(define (expmod base exp m)
+  (cond ((= exp 0) 1)
+        ((even? exp)
+         (remainder (square (expmod base (/ exp 2) m)) m))
+        (else
+         (remainder (* base (expmod base (- exp 1) m)) m))))
+
+(define (fermat-test n)
+  (define (try-it a)
+    (= (expmod a n n) a))
+  (try-it (+ 1 (random (- n 1)))))
+
+(define (fast-prime? n times)
+  (cond ((= times 0) true)
+        ((fermat-test n) 
+         (fast-prime? n (- times 1)))
+        (else false)))
+
+(define (start-prime-test n start-time)
+  (if (fast-prime? n 10)
+      (report-prime (- (runtime) 
+                       start-time))))
+
+(for-each timed-prime-test
+	  (list 1009    1013    1019
+		10007   10009   10037
+		100003  100019  100043
+		1000003 1000033 1000037))
+
+;; Once again, we can't answer this conclusively without a more accurate runtime
+;; procedure. However, I would speculate that it would be orders of magnitude
+;; faster than the O(sqrt n) method. O(1000000) = 1000, Log2(1000000) ~ 19.
+;; Any discrepancies that occur may be caused by the times parameter to
+;; fast-prime?.
+
+; Exercise 1.25
+
+; Yes, we could use her way. However, the algorithm given prevents the need for
+; exceeding the modulo value given by exploiting the "x times y modulo m" trick
+; described in footnote 46. It's just a helpful optimization.
+
+; Exercise 1.26
+
+; It's become an O(n) process because at the recursive call he's doubled the
+; number of computations. The call tree splits at every even number, so it's
+; essentially halving the number of calculations then doubling it. (n/2)*2=n.
+
+; Exercise 1.27
+
+(define (is-congruent? n)
+  (define (iter-from a)
+    (cond ((>= a n) true)
+	  ((= (expmod a n n) a)
+	   (iter-from (+ a 1)))
+	  (else false)))
+  (iter-from 2))
+
+(is-congruent? 8) ; #f
+(is-congruent? 17) ; #t
+
+(map is-congruent? (list 561 1105 1729 2465 2821 6601)) ; (#t #t #t #t #t #t)
+
+; Exercise 1.28
+
+(define (expmod base exp m)
+  (define (non-trivial-sqrt? a)
+    (and (not (= a 1))
+  	 (not (= a (- m 1)))
+  	 (= (remainder (square a) m) 1)))
+  (define (maybe-square a)
+    (if (non-trivial-sqrt? a) 0
+  	(square a)))
+  (cond ((= exp 0) 1)
+        ((even? exp)
+	 (remainder (maybe-square (expmod base (/ exp 2) m)) m))
+        (else
+         (remainder (* base (expmod base (- exp 1) m)) m))))
+
+(define (miller-rabin-test n)
+  (define (try-it a)
+    (= (expmod a (- n 1) n) 1))
+  (try-it (+ 1 (random (- n 1)))))
+
+(define (fast-prime? n times)
+  (cond ((= times 0) true)
+        ((miller-rabin-test n) 
+         (fast-prime? n (- times 1)))
+        (else false)))
+
+(fast-prime? 17 5) ; true
+(fast-prime? 8 5) ; false
+
+(map (lambda (n) (fast-prime? n 10))
+     (list 561 1105 1729 2465 2821 6601)) ; (#f #f #f #f #f #f)
