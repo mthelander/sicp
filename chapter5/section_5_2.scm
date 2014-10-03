@@ -255,7 +255,7 @@
 ;; 	      (set! s (cdr s))
 ;; 	      top))))
 ;;     (define (initialize)
-;;       (set! s '())
+;;       (set! stack-list '())
 ;;       'done)
 ;;     (define (dispatch message)
 ;;       (cond ((eq? message 'push) push)
@@ -502,7 +502,8 @@
         (let ((val (assoc name register-table)))
           (if val
               (cadr val)
-              (allocate-register name)))) ; NEW CODE
+              (begin (allocate-register name) ; NEW CODE
+	      	     (lookup-register name))))) ; NEW CODE
       (define (execute)
         (let ((insts (get-contents pc)))
           (if (null? insts)
@@ -529,7 +530,6 @@
 
 (define fibonacci-machine
   (make-machine
-   '(continue n val)
    (list (list '< <) (list '- -) (list '+ +))
    '(controller
      (assign continue (label fib-done))
