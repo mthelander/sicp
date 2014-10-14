@@ -850,3 +850,274 @@
 
 ; Exercise 5.17 ------------------------------------------------------------------
 
+(define (update-insts! insts labels machine)
+  (let ((pc (get-register machine 'pc))
+        (flag (get-register machine 'flag))
+        (stack (machine 'stack))
+        (ops (machine 'operations)))
+    ((machine 'save-labels) labels) ; NEW
+    (for-each
+     (lambda (inst)
+       (set-instruction-execution-proc! 
+        inst
+        (make-execution-procedure
+         (instruction-text inst) labels machine
+         pc flag stack ops)))
+     insts)))
+
+(define (make-new-machine)
+  (let ((pc (make-register 'pc))
+        (flag (make-register 'flag))
+        (stack (make-stack))
+        (the-instruction-sequence '())
+	(instruction-count 0)
+	(trace? false)
+	(labels '())) ; NEW
+    (let ((the-ops
+           (list (list 'initialize-stack
+                       (lambda () (stack 'initialize)))
+                 (list 'print-stack-statistics
+                       (lambda () (stack 'print-statistics)))))
+          (register-table
+           (list (list 'pc pc) (list 'flag flag))))
+      (define (allocate-register name)
+        (if (assoc name register-table)
+            (error "Multiply defined register: " name)
+            (set! register-table
+                  (cons (list name (make-register name))
+                        register-table)))
+        'register-allocated)
+      (define (lookup-register name)
+        (let ((val (assoc name register-table)))
+          (if val
+              (cadr val)
+              (error "Unknown register:" name))))
+      (define (try-display-label inst) ; NEW
+	; This method will result in some false positives, but for this
+	; factorial machine it works.
+	(let ((lbl ((association-procedure eq? cadr) inst labels)))
+	  (cond (lbl (display (car lbl))
+		     (newline)))))
+      (define (save-labels lbls)
+	(set! labels lbls)) ; /NEW
+      (define (execute)
+        (let ((insts (get-contents pc)))
+          (if (null? insts)
+              'done
+	      (let ((inst (car insts))) ; NEW
+		(if trace?
+		    (begin (try-display-label inst) ; NEW
+			   (display (car insts))
+			   (newline)))
+		(set! instruction-count (+ instruction-count 1))
+                ((instruction-execution-proc inst))
+                (execute)))))
+      (define (dispatch message)
+        (case message
+	    ((start)
+	     (set-contents! pc the-instruction-sequence)
+	     (execute))
+	    ((install-instruction-sequence)
+	     (lambda (seq) (set! the-instruction-sequence seq)))
+	    ((allocate-register) allocate-register)
+	    ((get-register) lookup-register)
+	    ((install-operations)
+	     (lambda (ops) (set! the-ops (append the-ops ops))))
+	    ((stack) stack)
+	    ((operations) the-ops)
+	    ((instruction-count) instruction-count)
+	    ((trace-on) (set! trace? true) 'tracing-on)
+	    ((trace-off) (set! trace? false) 'tracing-off)
+	    ((reset-instruction-count)
+	     (set! instruction-count 0)
+	     'instruction-count-reset)
+	    ((save-labels) save-labels) ; NEW
+	    (else (error "Unknown request -- MACHINE" message))))
+      dispatch)))
+
+(define factorial-machine (make-a-factorial-machine))
+
+(factorial-machine 'trace-on) ; tracing-on
+(set-register-contents! factorial-machine 'n 6)
+(start factorial-machine) ; It works.
+
+; Exercise 5.18 ------------------------------------------------------------------
+
+(define (make-register name)
+  (let ((contents '*unassigned*)
+	(trace? false))
+    (define (display-register new-value)
+      (display (list "register: " name))
+      (newline)
+      (display (list "old value: " contents))
+      (newline)
+      (display (list "new value: " new-value)))
+    (define (assign-value value)
+      (if trace? (display-register value))
+      (set! contents value))
+    (define (dispatch message)
+      (case message
+	((get) contents)
+	((set) assign-value)
+	((trace-on) (set! trace? true) message)
+	((trace-off) (set! trace? false) message)
+	(else (error "Unknown request -- REGISTER" message))))
+    dispatch))
+
+
+(define factorial-machine (make-a-factorial-machine))
+
+((get-register factorial-machine 'n) 'trace-on); trace-on
+(set-register-contents! factorial-machine 'n 5)
+;; (register:  n)
+;; (old value:  *unassigned*)
+;; (new value:  5)
+(set-register-contents! factorial-machine 'n 8)
+;; (register:  n)
+;; (old value:  5)
+;; (new value:  8)
+
+; Exercise 5.19 ------------------------------------------------------------------
+
+(define (make-new-machine)
+  (let ((pc (make-register 'pc))
+        (flag (make-register 'flag))
+        (stack (make-stack))
+        (the-instruction-sequence '())
+	(instruction-count 0)
+	(trace? false)
+	(labels '())
+	(count-since-label 0) ; NEW
+	(current-label '()) ; NEW
+	(breakpoints '())) ; NEW
+    (let ((the-ops
+           (list (list 'initialize-stack
+                       (lambda () (stack 'initialize)))
+                 (list 'print-stack-statistics
+                       (lambda () (stack 'print-statistics)))))
+          (register-table
+           (list (list 'pc pc) (list 'flag flag))))
+      (define (println str)
+	(display str)
+	(newline))
+      (define (allocate-register name)
+        (if (assoc name register-table)
+            (error "Multiply defined register: " name)
+            (set! register-table
+                  (cons (list name (make-register name))
+                        register-table)))
+        'register-allocated)
+      (define (lookup-register name)
+        (let ((val (assoc name register-table)))
+          (if val
+              (cadr val)
+              (error "Unknown register:" name))))
+      (define (first-inst-after-label? inst) ; NEW
+	((association-procedure eq? cadr) inst labels)) ; NEW
+      (define (display-label lbl)
+	(println (car lbl)))
+      (define (save-labels lbls)
+	(set! labels lbls))
+      (define (should-break? bp) ; NEW
+	(and bp (= count-since-label (cdr bp))))
+      (define (make-breakpoint label n)
+	(cons label n))
+      (define (set-breakpoint label n)
+	(set! breakpoints (cons (make-breakpoint label n) breakpoints)))
+      (define (current-breakpoint)
+	(assoc current-label breakpoints))
+      (define (display-register-contents reg-name)
+      	(display "Register ")
+      	(display reg-name)
+      	(display ": ")
+      	(println (get-register-contents dispatch reg-name)))
+      (define (handle-breakpoint bp current-inst)
+	(display current-inst)
+	(display "=> ")
+	(let ((command (read)))
+	  (case (car command)
+	    ((get-register-contents)
+	     (display-register-contents (cadr command))
+	     (handle-breakpoint bp current-inst))
+	    ((set-register-contents!)
+	     (let ((reg-name (cadr command))
+		   (reg-value (caddr command)))
+	     (set-register-contents! dispatch reg-name reg-value)
+	     (println (list reg-name "set to" reg-value))
+	     (handle-breakpoint bp current-inst)))
+	    ((proceed-machine)
+	     (println "Exiting breakpoint"))
+	    ((cancel-breakpoint)
+	     (set! breakpoints (delq bp breakpoints))
+	     (println "Breakpoint cancelled"))
+	    ((cancel-all-breakpoints)
+	     (set! breakpoints '())
+	     (println "All breakpoints cancelled"))
+	    (else (error "Unknown command --" command)))))
+      (define (do-stuff-just-after-label lbl)
+	(set! current-label (car lbl))
+	(set! count-since-label 0))
+      (define (display-trace inst lbl)
+	(if lbl (display-label lbl))
+	(println (car inst)))
+      (define (execute)
+        (let ((insts (get-contents pc)))
+          (if (null? insts)
+              'done
+	      (let ((inst (car insts)))
+		(let ((lbl (first-inst-after-label? inst))) ; NEW
+		  (if lbl (do-stuff-just-after-label lbl)) ; NEW
+		  (if trace? (display-trace inst lbl))) ; NEW
+		(let ((bp (current-breakpoint)))
+		  (if (should-break? bp)
+		      (handle-breakpoint bp (car inst)))) ; /NEW
+		(set! instruction-count (+ instruction-count 1))
+		(set! count-since-label (+ count-since-label 1))
+                ((instruction-execution-proc inst))
+                (execute)))))
+      (define (dispatch message)
+        (case message
+	    ((start)
+	     (set-contents! pc the-instruction-sequence)
+	     (execute))
+	    ((install-instruction-sequence)
+	     (lambda (seq) (set! the-instruction-sequence seq)))
+	    ((allocate-register) allocate-register)
+	    ((get-register) lookup-register)
+	    ((install-operations)
+	     (lambda (ops) (set! the-ops (append the-ops ops))))
+	    ((stack) stack)
+	    ((operations) the-ops)
+	    ((instruction-count) instruction-count)
+	    ((trace-on) (set! trace? true) 'tracing-on)
+	    ((trace-off) (set! trace? false) 'tracing-off)
+	    ((reset-instruction-count)
+	     (set! instruction-count 0)
+	     'instruction-count-reset)
+	    ((save-labels) save-labels)
+	    ((set-breakpoint) set-breakpoint) ; NEW
+	    (else (error "Unknown request -- MACHINE" message))))
+      dispatch)))
+
+(define (set-breakpoint machine label n)
+  ((machine 'set-breakpoint) label n)
+  'breakpoint-set)
+
+(define factorial-machine (make-a-factorial-machine))
+
+(set-register-contents! factorial-machine 'n 5)
+(set-breakpoint factorial-machine 'fact-loop 2)
+
+(let ((commands (string-append "(get-register-contents n)"
+			       "(set-register-contents! n 2)"
+			       "(cancel-breakpoint)")))
+  (with-input-from-string commands (lambda ()
+				     (start factorial-machine))))
+
+(display (get-register-contents factorial-machine 'n))
+;; (save continue)=> Register n: 5
+;; (save continue)=> (n set to 2)
+;; (save continue)=> Breakpoint cancelled
+
+;; (total-pushes = 2 maximum-depth = 2)
+;; 2
