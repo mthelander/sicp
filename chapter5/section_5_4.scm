@@ -614,4 +614,68 @@
 ;; (total-pushes = 688 maximum-depth = 33)
 
 ; S(n)=S(n-1)+S(n-2)+k
+; S(4)=128+72+k
+; 240=200+k
+; k=240-200
 ; k=40
+
+; S(3)=72+S(1)+40
+; S(3)=112+S(1)
+; 128=112+S(1)
+; S(1)=128-112
+; S(1)=16
+
+; S(2)=16+S(0)+40
+; S(2)=56+S(0)
+; 72=56+S(0)
+; S(0)=72-56
+; S(0)=16
+
+; S(1)=16
+; S(0)=16
+
+; It's exponential because of the recursive definition of S(n), which
+; forms a tree. A tree has 2^n leaf nodes.
+
+; S(n)=a*fib(n+1)+b
+; S(4)=a*fib(5)+b
+; 240=a*5+b
+
+; 72=a*2+b
+; b=72-2a
+
+; 240=5a+b
+; 240=5a+72-2a
+; 240=3a+72
+; 3a=240-72
+; 3a=168
+; a=168/3
+; a=56
+
+; 240=5(56)+b
+; 240=280+b
+; b=240-280
+; b=-40
+
+; a is 56, b is -40.
+
+; Proof:
+
+(define (S n)
+  (if (< n 2) 16
+      (+ (S (- n 1))
+	 (S (- n 2))
+	 40)))
+
+(map S '(1 2 3 4 5 6)) ; (16 72 128 240 408 688)
+
+(define (fib n)
+  (if (< n 2) n
+      (+ (fib (- n 1))
+	 (fib (- n 2)))))
+
+(define (fib-S n)
+  (- (* 56 (fib (+ n 1)))
+     40))
+
+(map fib-S '(1 2 3 4 5 6)) ; (16 72 128 240 408 688)
