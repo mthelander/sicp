@@ -289,9 +289,48 @@
 ; Exercise 2.11 ------------------------------------------------------------------
 
 (define (mul-interval x y)
-  (let ((p1 (* (lower-bound x) (lower-bound y)))
-        (p2 (* (lower-bound x) (upper-bound y)))
-        (p3 (* (upper-bound x) (lower-bound y)))
-        (p4 (* (upper-bound x) (upper-bound y))))
-    (make-interval (min p1 p2 p3 p4)
-                   (max p1 p2 p3 p4))))
+  (let ((lx (lower-bound x))
+	(ux (upper-bound x))
+	(ly (lower-bound y))
+	(uy (upper-bound y)))
+    (cond ((and (negative? lx) (negative? ux) (negative? ly) (negative? uy))
+	   (make-interval (* lx ly) (* ux uy)))
+	  ((and (negative? lx) (negative? ux) (negative? ly) (positive? uy))
+	   (make-interval (* lx uy) (* lx ly)))
+	  ((and (negative? lx) (negative? ux) (positive? ly) (positive? uy))
+	   (make-interval (* lx uy) (* ly uy)))
+	  ((and (negative? lx) (positive? ux) (positive? ly) (positive? uy))
+	   (make-interval (* lx ly) (* ux uy)))
+	  ((and (positive? lx) (positive? ux) (positive? ly) (positive? uy))
+	   (make-interval (* lx ly) (* ux uy)))
+	  ((and (positive? lx) (positive? ux) (negative? ly) (negative? uy))
+	   (make-interval (* ux ly) (* lx uy)))
+	  ((and (positive? lx) (positive? ux) (negative? ly) (positive? uy))
+	   (make-interval (* ux ly) (* ux uy)))
+	  ((and (negative? lx) (positive? ux) (negative? ly) (negative? uy))
+	   (make-interval (* ux ly) (* lx ly)))
+	  ((and (negative? lx) (positive? ux) (negative? ly) (positive? uy))
+	   (make-interval (min (* ux ly) (* lx uy))
+			  (max (* lx ly) (* ux uy)))))))
+
+(mul-interval (make-interval 2 4) (make-interval -2 4)) ; (-8 . 16)
+
+; Exercise 2.12 ------------------------------------------------------------------
+
+(define (make-center-width c w)
+  (make-interval (- c w) (+ c w)))
+(define (center i)
+  (/ (+ (lower-bound i) (upper-bound i)) 2))
+(define (width i)
+  (/ (- (upper-bound i) (lower-bound i)) 2))
+
+(define (make-center-percent ctr pct)
+  (make-center-width ctr (* ctr (/ pct 100.0))))
+
+(define (percent int)
+  (* 100.0
+     (/ (width int)
+	(center int))))
+
+(make-center-percent 56 12.7) ; (48.888 . 63.112)
+(percent (make-center-percent 56 12.7)) ; 12.700000000000003
