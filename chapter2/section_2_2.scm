@@ -505,16 +505,6 @@
 
 ; Exercise 2.42 ------------------------------------------------------------------
 
-(define empty-board '())
-(define (adjoin-position row k queens)
-  (cons (list row k) queens))
-(define (safe? k positions)
-  (if (null? positions) true
-      (let ((first (car positions)))
-	(and (not (= (car first)))
-	     (not (= (cadr first)))
-	     (
-
 (define (queens board-size)
   (define (queen-cols k)  
     (if (= k 0)
@@ -529,4 +519,47 @@
           (queen-cols (- k 1))))))
   (queen-cols board-size))
 
-(queens 4)
+(define empty-board '())
+(define (adjoin-position row k queens)
+  (cons (list row k) queens))
+(define (slope p1 p2)
+  (let ((numer (- (cadr p1) (cadr p2)))
+	(denom (- (car p1) (car p2))))
+    (if (or (= 0 numer) (= 0 denom)) 0
+	(/ numer denom))))
+(define (is-safe? k-queen other)
+  (let ((m (abs (slope k-queen other))))
+    (not (or (= m 0) (= m 1)))))
+
+(define (safe? k positions)
+  (let ((k-queen (car positions)))
+    (define (iter-rest rest-queens)
+      (if (null? rest-queens) true
+	  (and (is-safe? k-queen (car rest-queens))
+	       (iter-rest (cdr rest-queens)))))
+    (iter-rest (cdr positions))))
+
+(car (queens 8)) ; ((4 8) (2 7) (7 6) (3 5) (6 4) (8 3) (5 2) (1 1))
+
+; Exercise 2.43 ------------------------------------------------------------------
+
+; Louis Reasoner's mixup causes the program to recurse for every step of the
+; innermost map, rather than just k times. If the original program completes in T
+; time, then I would estimate this one to complete in T^k times, since each k
+; step spawns a whole new series of k calculations.
+
+; Exercise 2.44 ------------------------------------------------------------------
+
+(define (up-split painter n)
+  (if (= n 0) painter
+      (let ((smaller (up-split painter (- n 1))))
+        (below painter (beside smaller smaller)))))
+
+; Exercise 2.45 ------------------------------------------------------------------
+
+(define (split x y)
+  (lambda (painter n)
+    (if (= n 0) painter
+	(let ((smaller ((split x y) painter (- n 1))))
+	  (x painter (y smaller smaller))))))
+
