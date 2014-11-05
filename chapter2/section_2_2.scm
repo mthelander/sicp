@@ -563,3 +563,53 @@
 	(let ((smaller ((split x y) painter (- n 1))))
 	  (x painter (y smaller smaller))))))
 
+; Exercise 2.46 ------------------------------------------------------------------
+
+(define (make-vect x y) (cons x y))
+(define (xcor-vect v) (car v))
+(define (ycor-vect v) (cdr v))
+
+(define (add-vect v1 v2)
+  (make-vect (+ (xcor-vect v1) (xcor-vect v2))
+	     (+ (ycor-vect v1) (ycor-vect v2))))
+(define (sub-vect v1 v2)
+  (add-vect v1 (scale-vect v2 -1)))
+(define (scale-vect v s)
+  (make-vect (* s (xcor-vect v))
+	     (* s (ycor-vect v))))
+
+(define a (make-vect 3 5))
+(define b (make-vect 2 6))
+
+(add-vect a b) ; (5 . 11)
+(sub-vect a b) ; (1 . -1)
+(scale-vect a 10) ; (30 . 50)
+
+; Exercise 2.47 ------------------------------------------------------------------
+
+; First method:
+
+(define (make-frame origin edge1 edge2)
+  (list origin edge1 edge2))
+
+(define (origin-frame f) (car f))
+(define (edge1-frame f) (cadr f))
+(define (edge2-frame f) (caddr f))
+
+(define f (make-frame (make-vect 0 0) (make-vect 2 2) (make-vect 1 1)))
+(origin-frame f) ; (0 . 0)
+(edge1-frame f) ; (2 . 2)
+(edge2-frame f) ; (1 . 1)
+
+; Second method:
+
+(define (make-frame origin edge1 edge2)
+  (cons origin (cons edge1 edge2)))
+
+(define (edge2-frame f) (cddr f))
+
+(define f (make-frame (make-vect 0 0) (make-vect 2 2) (make-vect 1 1)))
+(origin-frame f) ; (0 . 0)
+(edge1-frame f) ; (2 . 2)
+(edge2-frame f) ; (1 . 1)
+
