@@ -613,3 +613,132 @@
 (edge1-frame f) ; (2 . 2)
 (edge2-frame f) ; (1 . 1)
 
+; Exercise 2.48 ------------------------------------------------------------------
+
+(define (make-segment start end) (cons start end))
+(define (start-segment s) (car s))
+(define (end-segment s) (cdr s))
+
+(define seg-test (make-segment (make-vect 3 6)
+			       (make-vect 5 7)))
+
+(start-segment seg-test) ; (3 . 6)
+(end-segment seg-test) ; (5 . 7)
+
+; Exercise 2.49 ------------------------------------------------------------------
+
+(define (segments->painter segment-list)
+  (lambda (frame)
+    (for-each
+     (lambda (segment)
+       (draw-line
+        ((frame-coord-map frame) (start-segment segment))
+        ((frame-coord-map frame) (end-segment segment))))
+     segment-list)))
+
+(define upper-left (make-vect 0 1))
+(define upper-right (make-vect 1 1))
+(define bottom-left (make-vect 0 0))
+(define bottom-right (make-vect 1 0))
+
+; a.
+
+(define frame-outline-painter (segments->painter
+			       (list (make-segment bottom-left upper-left)
+				     (make-segment upper-left upper-right)
+				     (make-segment upper-right bottom-right)
+				     (make-segment bottom-right bottom-left))))
+
+; b.
+
+(define x-painter (segments->painter
+		   (list (make-segment bottom-left upper-right)
+			 (make-segment bottom-right upper-left))))
+
+; c.
+
+(define diamond-painter (segments->painter
+			 (list (make-segment (make-vect 0.5 0) (make-vect 0 0.5))
+			       (make-segment (make-vect 0 0.5) (make-vect 0.5 1))
+			       (make-segment (make-vect 0.5 1) (make-vect 1 0.5))
+			       (make-segment (make-vect 1 0.5) (make-vect 0.5 0)))))
+
+; d.
+
+; Yeeeeeaaaahhhh... No. This exercise is completedly pointless, and I can't
+; even test it!
+
+; Exercise 2.50 ------------------------------------------------------------------
+
+(define (flip-horiz painter)
+  (transform-painter painter
+		     (make-vect 1.0 0.0) ; new origin
+		     (make-vect 0.0 0.0)
+		     (make-vect 1.0 1.0)))
+
+(define (rotate90 painter)
+  (transform-painter painter
+                     (make-vect 1.0 0.0)
+                     (make-vect 1.0 1.0)
+                     (make-vect 0.0 0.0)))
+
+(define (rotate180 painter)
+  (rotate90 (rotate90 painter)))
+
+(define (rotate270 painter)
+  (rotate180 (rotate90 painter)))
+
+; Exercise 2.51 ------------------------------------------------------------------
+
+; a.
+
+(define (below painter1 painter2)
+  (let ((split-point (make-vect 0.0 0.5)))
+    (let ((paint-up
+           (transform-painter painter1
+                              split-point
+			      (make-vect 1.0 0.5)
+                              (make-vect 0.0 1.0)))
+          (paint-down
+           (transform-painter painter2
+                              (make-vect 0.0 0.0)
+                              (make-vect 1.0 0.0)
+			      split-point)))
+      (lambda (frame)
+        (paint-up frame)
+        (paint-down frame)))))
+
+; b.
+
+(define (below painter1 painter2)
+  (rotate90 (beside (rotate270 painter1)
+		    (rotate270 painter2))))
+
+; Exercise 2.52 ------------------------------------------------------------------
+
+(define (square-limit painter n)
+  (let ((quarter (corner-split painter n)))
+    (let ((half (beside (flip-horiz quarter) quarter)))
+      (below (flip-vert half) half))))
+
+; a.
+
+(define altered-wave
+  (lambda (frame)
+    ; Just guestimating for the coordinates
+    ((frame-coord-map frame) (make-vect 1/3 1/6))
+    ((frame-coord-map frame) (make-vect (+ 1/3 1/10) 1/6))
+    (wave frame)))
+
+; b.
+
+(define (corner-split painter n)
+  (if (= n 0)
+      painter
+      (let ((up (up-split painter (- n 1)))
+            (right (right-split painter (- n 1))))
+        (let ((top-left (beside up up))
+              (bottom-right (below right right))
+              (corner (corner-split painter (- n 1))))
+          (beside (below painter top-left)
+                  (below bottom-right corner))))))
