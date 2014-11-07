@@ -150,271 +150,172 @@
 
 ; Exercise 5.25 ------------------------------------------------------------------
 
-;; (define (actual-value exp env)
-;;   (force-it (eval exp env)))
+(define lazy-ev-application
+  '(
+ev-application
+  (save continue)
+  (save env)
+  (assign unev (op operands) (reg exp))
+  (save unev)
+  (assign exp (op operator) (reg exp))
+  (assign continue (label ev-appl-did-operator))
+  (goto (label actual-value)) ; NEW
 
-;; (define (lazy-eceval-body)
-;;   `(
-;; read-eval-print-loop
-;;   (perform (op initialize-stack))
-;;   (perform
-;;    (op prompt-for-input) (const ";;; Lazy EC-Eval input:"))
-;;   (assign exp (op read))
-;;   (test (op exit?) (reg exp))
-;;   (branch (label end-of-eval))
-;;   (assign env (op get-global-environment))
-;;   (assign continue (label print-result))
-;;   (goto (label eval-dispatch))
-;; print-result
-;;   (perform (op print-stack-statistics))
-;;   (perform
-;;    (op announce-output) (const ";;; Lazy EC-Eval value:"))
-;;   (perform (op user-print) (reg val))
-;;   (goto (label read-eval-print-loop))
+ev-appl-did-operator
+  (restore unev)
+  (restore env)
+  (assign argl (op empty-arglist))
+  (assign proc (reg val))
+  (test (op no-operands?) (reg unev))
+  (branch (label apply-dispatch)) ; CHANGE
+  (save proc)
+  ; NEW
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-ev-appl-operand-loop))
+  (test (op compound-procedure?) (reg proc))  
+  (branch (label compound-ev-appl-operand-loop))
+  (goto (label unknown-procedure-type))
 
-;; unknown-expression-type
-;;   (assign val (const unknown-expression-type-error))
-;;   (goto (label signal-error))
+primitive-ev-appl-operand-loop
+  (save argl)
+  (assign exp (op first-operand) (reg unev))
+  (test (op last-operand?) (reg unev))
+  (branch (label primitive-ev-appl-last-arg))
+  (save env)
+  (save unev)
+  (assign continue (label primitive-ev-appl-accumulate-arg))
+  (goto (label actual-value))
+primitive-ev-appl-accumulate-arg
+  (restore unev)
+  (restore env)
+  (restore argl)
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (assign unev (op rest-operands) (reg unev))
+  (goto (label primitive-ev-appl-operand-loop))
+primitive-ev-appl-last-arg
+  (assign continue (label primitive-ev-appl-accum-last-arg))
+  (goto (label eval-dispatch))
+primitive-ev-appl-accum-last-arg
+  (restore argl)
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (restore proc)
+  (goto (label primitive-apply))
 
-;; unknown-procedure-type
-;;   (restore continue)
-;;   (assign val (const unknown-procedure-type-error))
-;;   (goto (label signal-error))
+compound-ev-appl-operand-loop
+  (test (op null?) (reg unev))
+  (branch (label compound-no-more-operands))
+  (assign exp (op first-operand) (reg unev))
+  (assign val (op delay-it) (reg exp) (reg env))
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (assign unev (op rest-operands) (reg unev))
+  (goto (label compound-ev-appl-operand-loop))
+compound-no-more-operands
+  (restore proc)
+  (goto (label compound-apply))
+; /NEW
 
-;; signal-error
-;;   (perform (op user-print) (reg val))
-;;   (goto (label read-eval-print-loop))
+apply-dispatch
+  ; Most of this is redundant, but oh well.
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-apply))
+  (test (op compound-procedure?) (reg proc))  
+  (branch (label compound-apply))
+  (goto (label unknown-procedure-type))
 
-;; eval-dispatch
-;;   (test (op self-evaluating?) (reg exp))
-;;   (branch (label ev-self-eval))
-;;   (test (op variable?) (reg exp))
-;;   (branch (label ev-variable))
-;;   (test (op quoted?) (reg exp))
-;;   (branch (label ev-quoted))
-;;   (test (op assignment?) (reg exp))
-;;   (branch (label ev-assignment))
-;;   (test (op definition?) (reg exp))
-;;   (branch (label ev-definition))
-;;   (test (op if?) (reg exp))
-;;   (branch (label ev-if))
-;;   (test (op lambda?) (reg exp))
-;;   (branch (label ev-lambda))
-;;   (test (op begin?) (reg exp))
-;;   (branch (label ev-begin))
-;;   (test (op application?) (reg exp))
-;;   (branch (label ev-application))
-;;   (goto (label unknown-expression-type))
+primitive-apply
+  (assign val (op apply-primitive-procedure)
+              (reg proc)
+              (reg argl))
+  (restore continue)
+  (goto (reg continue))
 
-;; ev-self-eval
-;;   (assign val (reg exp))
-;;   (goto (reg continue))
-;; ev-variable
-;;   (assign val (op lookup-variable-value) (reg exp) (reg env))
-;;   (goto (reg continue))
-;; ev-quoted
-;;   (assign val (op text-of-quotation) (reg exp))
-;;   (goto (reg continue))
-;; ev-lambda
-;;   (assign unev (op lambda-parameters) (reg exp))
-;;   (assign exp (op lambda-body) (reg exp))
-;;   (assign val (op make-procedure)
-;;               (reg unev) (reg exp) (reg env))
-;;   (goto (reg continue))
+compound-apply
+  (assign unev (op procedure-parameters) (reg proc))
+  (assign env (op procedure-environment) (reg proc))
+  (assign env (op extend-environment)
+              (reg unev) (reg argl) (reg env))
+  (assign unev (op procedure-body) (reg proc))
+  (goto (label ev-sequence))
 
-;; ; NEW
-;; actual-value
-;;   (save continue)
-;;   (assign continue (label force-it))
-;;   (goto (label eval-dispatch))
+actual-value
+  (save continue)
+  (assign continue (label force-it))
+  (goto (label eval-dispatch))
 
-;; force-it
-;;   (restore continue)
-;;   (test val (op thunk?) (reg val))
-;;   (branch (label force-a-thunk))
-;;   (goto (reg continue)) ; val already contains the value
+force-it
+  (restore continue)
+  (test (op thunk?) (reg val))
+  (branch (label force-a-thunk))
+  (goto (reg continue)) ; val already contains the value
 
-;; force-a-thunk
-;;   ...
+force-a-thunk
+  (assign exp (op thunk-exp) (reg val))
+  (assign env (op thunk-env) (reg val))
+  (goto (label actual-value))))
 
-;; ; /NEW
+; From 4.2
+(define (delay-it exp env) (list 'thunk exp env))
+(define (thunk? obj) (tagged-list? obj 'thunk))
+(define (thunk-exp thunk) (cadr thunk))
+(define (thunk-env thunk) (caddr thunk))
+; End 4.2
 
-;; ev-application
-;;   (save continue)
-;;   (save env)
-;;   (assign unev (op operands) (reg exp))
-;;   (save unev)
-;;   (assign exp (op operator) (reg exp))
-;;   (assign continue (label ev-appl-did-operator))
-;;   (goto (label eval-dispatch))
-;; ev-appl-did-operator
-;;   (restore unev)
-;;   (restore env)
-;;   (assign argl (op empty-arglist))
-;;   (assign proc (reg val))
-;;   (test (op no-operands?) (reg unev))
-;;   (branch (label apply-dispatch))
-;;   (save proc)
-;; ev-appl-operand-loop
-;;   (save argl)
-;;   (assign exp (op first-operand) (reg unev))
-;;   (test (op last-operand?) (reg unev))
-;;   (branch (label ev-appl-last-arg))
-;;   (save env)
-;;   (save unev)
-;;   (assign continue (label ev-appl-accumulate-arg))
-;;   (goto (label eval-dispatch))
-;; ev-appl-accumulate-arg
-;;   (restore unev)
-;;   (restore env)
-;;   (restore argl)
-;;   (assign argl (op adjoin-arg) (reg val) (reg argl))
-;;   (assign unev (op rest-operands) (reg unev))
-;;   (goto (label ev-appl-operand-loop))
-;; ev-appl-last-arg
-;;   (assign continue (label ev-appl-accum-last-arg))
-;;   (goto (label eval-dispatch))
-;; ev-appl-accum-last-arg
-;;   (restore argl)
-;;   (assign argl (op adjoin-arg) (reg val) (reg argl))
-;;   (restore proc)
-;;   (goto (label apply-dispatch))
-;; apply-dispatch
-;;   (test (op primitive-procedure?) (reg proc))
-;;   (branch (label primitive-apply))
-;;   (test (op compound-procedure?) (reg proc))  
-;;   (branch (label compound-apply))
-;;   (goto (label unknown-procedure-type))
+(define lazy-eceval-operations
+  (append eceval-extended-operations
+	  `(
+	    (exit? ,exit?)
+	    (cond? ,cond?)
+	    (cond->if ,cond->if)
+	    (let? ,let?)
+	    (let->combination ,let->combination)
+	    (cond-clauses ,cond-clauses)
+	    (cond-predicate ,cond-predicate)
+	    (cond-else-clause? ,cond-else-clause?)
+	    (cond-predicate ,cond-predicate)
+	    (cond-actions ,cond-actions)
+	    (car ,car)
+	    (cdr ,cdr)
+	    (null? ,null?)
+	    (display ,display)
+	    (thunk? ,thunk?) ; NEW
+	    (thunk-exp ,thunk-exp) ; NEW
+	    (thunk-env ,thunk-env) ; NEW
+	    (delay-it ,delay-it) ; NEW
+	   )))
 
-;; primitive-apply
-;;   (assign val (op apply-primitive-procedure)
-;;               (reg proc)
-;;               (reg argl))
-;;   (restore continue)
-;;   (goto (reg continue))
+(define (lazy-eceval-body)
+  (append read-eval-print-loop
+	  print-result
+	  unknown-expression-type
+	  unknown-procedure-type
+	  signal-error
+	  eval-dispatch
+	  ev-self-eval
+	  lazy-ev-application ; CHANGED
+	  primitive-apply
+	  coumpound-apply
+	  ev-begin
+	  ev-let
+	  ev-cond
+	  ev-sequence
+	  ev-if
+	  ev-assignment
+	  ev-definition))
 
-;; compound-apply
-;;   (assign unev (op procedure-parameters) (reg proc))
-;;   (assign env (op procedure-environment) (reg proc))
-;;   (assign env (op extend-environment)
-;;               (reg unev) (reg argl) (reg env))
-;;   (assign unev (op procedure-body) (reg proc))
-;;   (goto (label ev-sequence))
+(define (make-lazy-eceval)
+  (make-machine
+   '(exp env val proc argl continue unev)
+   lazy-eceval-operations
+   (lazy-eceval-body)))
 
-;; ev-begin
-;;   (assign unev (op begin-actions) (reg exp))
-;;   (save continue)
-;;   (goto (label ev-sequence))
+(define lazy-eceval (make-lazy-eceval))
 
-;; ev-let
-;;   (assign exp (op let->combination) (reg exp))
-;;   (goto (label eval-dispatch))
+(define (run-it-lazy)
+  (start lazy-eceval)
+  (get-register-contents lazy-eceval 'val))
 
-;; ev-sequence
-;;   (assign exp (op first-exp) (reg unev))
-;;   (test (op last-exp?) (reg unev))
-;;   (branch (label ev-sequence-last-exp))
-;;   (save unev)
-;;   (save env)
-;;   (assign continue (label ev-sequence-continue))
-;;   (goto (label eval-dispatch))
-;; ev-sequence-continue
-;;   (restore env)
-;;   (restore unev)
-;;   (assign unev (op rest-exps) (reg unev))
-;;   (goto (label ev-sequence))
-;; ev-sequence-last-exp
-;;   (restore continue)
-;;   (goto (label eval-dispatch))
-
-;; ev-if
-;;   (save exp)
-;;   (save env)
-;;   (save continue)
-;;   (assign continue (label ev-if-decide))
-;;   (assign exp (op if-predicate) (reg exp))
-;;   (goto (label eval-dispatch))
-;; ev-if-decide
-;;   (restore continue)
-;;   (restore env)
-;;   (restore exp)
-;;   (test (op true?) (reg val))
-;;   (branch (label ev-if-consequent))
-;; ev-if-alternative
-;;   (assign exp (op if-alternative) (reg exp))
-;;   (goto (label eval-dispatch))
-;; ev-if-consequent
-;;   (assign exp (op if-consequent) (reg exp))
-;;   (goto (label eval-dispatch))
-
-;; ev-assignment
-;;   (assign unev (op assignment-variable) (reg exp))
-;;   (save unev)
-;;   (assign exp (op assignment-value) (reg exp))
-;;   (save env)
-;;   (save continue)
-;;   (assign continue (label ev-assignment-1))
-;;   (goto (label eval-dispatch))
-;; ev-assignment-1
-;;   (restore continue)
-;;   (restore env)
-;;   (restore unev)
-;;   (perform
-;;    (op set-variable-value!) (reg unev) (reg val) (reg env))
-;;   (assign val (const ok))
-;;   (goto (reg continue))
-
-;; ev-definition
-;;   (assign unev (op definition-variable) (reg exp))
-;;   (save unev)
-;;   (assign exp (op definition-value) (reg exp))
-;;   (save env)
-;;   (save continue)
-;;   (assign continue (label ev-definition-1))
-;;   (goto (label eval-dispatch))
-;; ev-definition-1
-;;   (restore continue)
-;;   (restore env)
-;;   (restore unev)
-;;   (perform
-;;    (op define-variable!) (reg unev) (reg val) (reg env))
-;;   (assign val (const ok))
-;;   (goto (reg continue))
-;; end-of-eval))
-
-;; (define lazy-eceval-operations
-;;   (append eceval-extended-operations
-;; 	  `(
-;; 	    (exit? ,exit?)
-;; 	    (cond? ,cond?)
-;; 	    (cond->if ,cond->if)
-;; 	    (let? ,let?)
-;; 	    (let->combination ,let->combination)
-;; 	    (cond-clauses ,cond-clauses)
-;; 	    (cond-predicate ,cond-predicate)
-;; 	    (cond-else-clause? ,cond-else-clause?)
-;; 	    (cond-predicate ,cond-predicate)
-;; 	    (cond-actions ,cond-actions)
-;; 	    (car ,car)
-;; 	    (cdr ,cdr)
-;; 	    (null? ,null?)
-;; 	    (display ,display)
-;; 	   )))
-
-;; (define (make-lazy-eceval)
-;;   (make-machine
-;;    '(exp env val proc argl continue unev)
-;;    lazy-eceval-operations
-;;    (lazy-eceval-body)))
-
-;; (define lazy-eceval (make-lazy-eceval))
-
-;; (define (run-it-lazy)
-;;   (start lazy-eceval)
-;;   (get-register-contents lazy-eceval 'val))
-
-;; (with-input-from-string "(define (try a b) (if (= a 0) 1 b)) (try 0 (/ 1 0))"
-;;   run-it-lazy) ; 8
+(with-input-from-string "(define (try a b) (if (= a 0) 1 b)) (try 0 (/ 1 0))"
+  run-it-lazy) ; 1
 
 ; Exercise 5.26 ------------------------------------------------------------------
 
