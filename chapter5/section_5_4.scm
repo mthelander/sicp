@@ -591,7 +591,7 @@ force-a-thunk
 ; That's too much work, so I'm just going to focus on the specific example they
 ; called out in the text, looking up an undefined variable.
 
-(define (lookup-variable-value var env)
+(define (lookup-variable-value-safely var env)
   (define (env-loop env)
     (define (scan vars vals)
       (cond ((null? vars)
@@ -612,7 +612,7 @@ ev-self-eval
   (assign val (reg exp))
   (goto (reg continue))
 ev-variable
-  (assign val (op lookup-variable-value) (reg exp) (reg env))
+  (assign val (op lookup-variable-value-safely) (reg exp) (reg env))
   (test (op eq?) (reg val) (const **undefined-variable**)) ; NEW
   (branch (label handle-undefined-variable)) ; NEW
   (goto (reg continue))
@@ -627,8 +627,15 @@ ev-lambda
   (goto (reg continue))
 
 handle-undefined-variable ; NEW
-  (assign val (const "Attempted to access an undefined variable!")) ; NEW
-  (goto (reg continue)))) ; NEW
+  (assign val (const attempted-to-access-an-undefined-variable)) ; NEW
+  (goto (label signal-error)))) ; NEW
+
+(define (make-extended-eceval)
+  (make-machine
+   '(exp env val proc argl continue unev)
+   (append eceval-extended-operations
+	   `((lookup-variable-value-safely ,lookup-variable-value-safely)))
+   (eceval-body)))
 
 (define safer-eceval (make-extended-eceval))
 
@@ -636,7 +643,8 @@ handle-undefined-variable ; NEW
   (start safer-eceval)
   (get-register-contents safer-eceval 'val))
 
-;(with-input-from-string "(foo 3 4 5)" run-it-safer) ; Unbound variable foo
+;; (with-input-from-string "(foo 3 4 5)" run-it-safer)
+;; ;Value: attempted-to-access-an-undefined-variable
 
 ; b.
 
@@ -656,28 +664,20 @@ handle-undefined-variable ; NEW
   (and (pair? obj)
        (eq? (car obj) '**error**)))
 
-(define safe-eceval-operations
-  (append eceval-operations
-	  `(
-	    (exit? ,exit?)
-	    (eq? ,eq?)
-	    (cond? ,cond?)
-	    (cond->if ,cond->if)
-	    (let? ,let?)
-	    (let->combination ,let->combination)
-	    (cond-clauses ,cond-clauses)
-	    (cond-predicate ,cond-predicate)
-	    (cond-else-clause? ,cond-else-clause?)
-	    (cond-predicate ,cond-predicate)
-	    (cond-actions ,cond-actions)
-	    (car ,safe-car)
-	    (/ ,safe-/)
-	    (cdr ,cdr)
-	    (null? ,null?)
-	    (display ,display)
-	    (error? ,error?)
-	    (cadr ,cadr)
-	   )))
+(define primitive-procedures
+  `((car ,safe-car)
+    (cdr ,cdr)
+    (cons ,cons)
+    (null? ,null?)
+    (+ ,+)
+    (- ,-)
+    (* ,*)
+    (= ,=)
+    (/ ,safe-/)
+    (> ,>)
+    (< ,<)))
+
+(define the-global-environment (setup-environment))
 
 (define primitive-apply
   '(
@@ -695,16 +695,19 @@ handle-primitive-apply-error
   (assign val (op cadr) (reg val))
   (goto (label signal-error))))
 
-(define (make-safest-eceval)
+(define (make-extended-eceval)
   (make-machine
    '(exp env val proc argl continue unev)
-   safe-eceval-operations
+   (append eceval-extended-operations
+	   `((lookup-variable-value-safely ,lookup-variable-value-safely)
+	     (error? ,error?)
+	     (cadr ,cadr)))
    (eceval-body)))
 
-(define safest-eceval (make-safest-eceval))
+(define safer-eceval (make-extended-eceval))
 
-(define (run-it-safest)
-  (start safest-eceval)
-  (get-register-contents safest-eceval 'val))
+;; (with-input-from-string "(car 3)" run-it-safer)
+;; ; object passed to car is not a pair!
 
-(with-input-from-string "(car 3)" run-it-safer) ; Unbound variable foo
+;; (with-input-from-string "(/ 3 0)" run-it-safer)
+;; ; divide by zero attempted!
