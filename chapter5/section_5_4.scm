@@ -46,6 +46,7 @@
 (define eceval-extended-operations
   (append eceval-operations
 	  `((exit? ,exit?)
+	    (eq? ,eq?)
 	    (cond? ,cond?)
 	    (cond->if ,cond->if)
 	    (let? ,let?)
@@ -87,6 +88,7 @@
   (append eceval-operations
 	  `(
 	    (exit? ,exit?)
+	    (eq? ,eq?)
 	    (cond? ,cond?)
 	    (cond->if ,cond->if)
 	    (let? ,let?)
@@ -580,3 +582,129 @@ force-a-thunk
      40))
 
 (map fib-S '(1 2 3 4 5 6)) ; (16 72 128 240 408 688)
+
+; Exercise 5.30 ------------------------------------------------------------------
+
+; a.
+
+; Are you really asking me to fix EVERY POSSIBLY evaluation error SICP?
+; That's too much work, so I'm just going to focus on the specific example they
+; called out in the text, looking up an undefined variable.
+
+(define (lookup-variable-value var env)
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars)
+             (env-loop (enclosing-environment env)))
+            ((eq? var (car vars))
+             (car vals))
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        '**undefined-variable** ; <----- NEW
+        (let ((frame (first-frame env)))
+          (scan (frame-variables frame)
+                (frame-values frame)))))
+  (env-loop env))
+
+(define ev-self-eval
+  '(
+ev-self-eval
+  (assign val (reg exp))
+  (goto (reg continue))
+ev-variable
+  (assign val (op lookup-variable-value) (reg exp) (reg env))
+  (test (op eq?) (reg val) (const **undefined-variable**)) ; NEW
+  (branch (label handle-undefined-variable)) ; NEW
+  (goto (reg continue))
+ev-quoted
+  (assign val (op text-of-quotation) (reg exp))
+  (goto (reg continue))
+ev-lambda
+  (assign unev (op lambda-parameters) (reg exp))
+  (assign exp (op lambda-body) (reg exp))
+  (assign val (op make-procedure)
+              (reg unev) (reg exp) (reg env))
+  (goto (reg continue))
+
+handle-undefined-variable ; NEW
+  (assign val (const "Attempted to access an undefined variable!")) ; NEW
+  (goto (reg continue)))) ; NEW
+
+(define safer-eceval (make-extended-eceval))
+
+(define (run-it-safer)
+  (start safer-eceval)
+  (get-register-contents safer-eceval 'val))
+
+;(with-input-from-string "(foo 3 4 5)" run-it-safer) ; Unbound variable foo
+
+; b.
+
+; Again, this is too much work, so I'm just going to focus on the two examples
+; the authors called out in the text.
+
+(define (safe-car obj)
+  (if (pair? obj)
+      (car obj)
+      '(**error** "object passed to car is not a pair!")))
+(define (safe-/ a b)
+  (if (= 0)
+      '(**error** "divide by zero attempted!")
+      (/ a b)))
+
+(define (error? obj)
+  (and (pair? obj)
+       (eq? (car obj) '**error**)))
+
+(define safe-eceval-operations
+  (append eceval-operations
+	  `(
+	    (exit? ,exit?)
+	    (eq? ,eq?)
+	    (cond? ,cond?)
+	    (cond->if ,cond->if)
+	    (let? ,let?)
+	    (let->combination ,let->combination)
+	    (cond-clauses ,cond-clauses)
+	    (cond-predicate ,cond-predicate)
+	    (cond-else-clause? ,cond-else-clause?)
+	    (cond-predicate ,cond-predicate)
+	    (cond-actions ,cond-actions)
+	    (car ,safe-car)
+	    (/ ,safe-/)
+	    (cdr ,cdr)
+	    (null? ,null?)
+	    (display ,display)
+	    (error? ,error?)
+	    (cadr ,cadr)
+	   )))
+
+(define primitive-apply
+  '(
+primitive-apply
+  (assign val (op apply-primitive-procedure)
+              (reg proc)
+              (reg argl))
+  (test (op error?) (reg val))
+  (branch (label handle-primitive-apply-error))
+  (restore val)
+  (restore continue)
+  (goto (reg continue))
+
+handle-primitive-apply-error
+  (assign val (op cadr) (reg val))
+  (goto (label signal-error))))
+
+(define (make-safest-eceval)
+  (make-machine
+   '(exp env val proc argl continue unev)
+   safe-eceval-operations
+   (eceval-body)))
+
+(define safest-eceval (make-safest-eceval))
+
+(define (run-it-safest)
+  (start safest-eceval)
+  (get-register-contents safest-eceval 'val))
+
+(with-input-from-string "(car 3)" run-it-safer) ; Unbound variable foo
