@@ -288,7 +288,7 @@
 
 ; Exercise 2.11 ------------------------------------------------------------------
 
-(define (mul-interval x y)
+(define (mul-interval-fast x y)
   (let ((lx (lower-bound x))
 	(ux (upper-bound x))
 	(ly (lower-bound y))
@@ -313,7 +313,7 @@
 	   (make-interval (min (* ux ly) (* lx uy))
 			  (max (* lx ly) (* ux uy)))))))
 
-(mul-interval (make-interval 2 4) (make-interval -2 4)) ; (-8 . 16)
+(mul-interval-fast (make-interval 2 4) (make-interval -2 4)) ; (-8 . 16)
 
 ; Exercise 2.12 ------------------------------------------------------------------
 
@@ -334,3 +334,70 @@
 
 (make-center-percent 56 12.7) ; (48.888 . 63.112)
 (percent (make-center-percent 56 12.7)) ; 12.700000000000003
+
+; Exercise 2.13 ------------------------------------------------------------------
+
+(percent (mul-interval (make-center-percent 144 12)
+		       (make-center-percent 120 15))) ; 26.522593320235753
+
+(percent (mul-interval (make-center-percent 200 10)
+		       (make-center-percent 100 5))) ; 14.925373134328357
+
+(percent (mul-interval (make-center-percent 100 1/2)
+		       (make-center-percent 100 1/3))) ; .8333194446759189
+
+; As the percent tolerances get smaller the percent tolerence of the intervals'
+; product seems to approach the sum of the tolerances.
+
+; Exercise 2.14 ------------------------------------------------------------------
+
+(define (par1 r1 r2)
+  (div-interval (mul-interval r1 r2)
+                (add-interval r1 r2)))
+(define (par2 r1 r2)
+  (let ((one (make-interval 1 1))) 
+    (div-interval one
+                  (add-interval (div-interval one r1)
+                                (div-interval one r2)))))
+
+(define A (make-interval 150 155))
+(define B (make-interval 120 121))
+
+(par1 A B) ; (65.21739130434783 . 69.46296296296296)
+(par2 A B) ; (66.66666666666667 . 67.95289855072464)
+(par1 A A) ; (72.58064516129032 . 80.08333333333334)
+(par2 A A) ; (75. . 77.5)
+
+(define C (make-center-percent 20 3))
+(define D (make-center-percent 35 2))
+
+(par1 C D) ; (11.819182948490228 . 13.694972067039108)
+(par2 C D) ; (12.39143389199255 . 13.06252220248668)
+(par1 C C) ; (9.134951456310679 . 10.937113402061858)
+(par2 C C) ; (9.7 . 10.3)
+
+(define E (make-interval 100 1000))
+(define F (make-interval 250 750))
+
+(par1 E F) ; (14.285714285714286 . 2142.8571428571427)
+(par2 E F) ; (71.42857142857143 . 428.5714285714286)
+(par1 E E) ; (5. . 5000.)
+(par2 E E) ; (50. . 500.)
+
+; Indeed they are different, and they seem to diverge more the larger
+; the width is.
+
+; Exercise 2.15 ------------------------------------------------------------------
+
+; I'm not sure. I think this is a symptom of a fundamental problem with our
+; representation of intervals, in that it seems like the interval (1 . 1) doesn't
+; actually represent the number 1.
+
+; Exercise 2.16 ------------------------------------------------------------------
+
+; The discrepancies are attributable the different data representations. The
+; algebraic expressions are centered around the idea of numbers, but our interval
+; system isn't represented in such a simple way. Therefore the rules that hold for
+; algebraic expressions do not neccesarily hold for our intervals. I am not going
+; to attempt to devise a way around this limitation.
+
