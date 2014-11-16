@@ -58,10 +58,6 @@ eval-dispatch
   (branch (label ev-lambda))
   (test (op begin?) (reg exp))
   (branch (label ev-begin))
-  (test (op cond?) (reg exp)) ; NEW
-  (branch (label ev-cond)) ; NEW
-  (test (op let?) (reg exp)) ; NEW
-  (branch (label ev-let)) ; NEW
   (test (op application?) (reg exp))
   (branch (label ev-application))
   (goto (label unknown-expression-type))))
@@ -159,10 +155,6 @@ ev-begin
   (save continue)
   (goto (label ev-sequence))))
 
-;; ; NEW CODE
-
-;; ,@(cond-definition)
-
 (define ev-let
   '(
 ev-let
@@ -251,6 +243,9 @@ ev-definition-1
   (goto (reg continue))
 end-of-eval))
 
+(define (exit? exp)
+  (eof-object? exp))
+
 (define (eceval-body)
   (append read-eval-print-loop
 	  print-result
@@ -271,5 +266,5 @@ end-of-eval))
 (define (make-eceval)
   (make-machine
    '(exp env val proc argl continue unev)
-   eceval-operations
+   (append eceval-operations `((exit? ,exit?)))
    (eceval-body)))

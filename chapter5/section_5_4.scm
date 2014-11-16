@@ -8,14 +8,38 @@
 
 (load "~/work/sicp/chapter5/eceval-components.scm")
 
+(define eval-dispatch
+  '(
+eval-dispatch
+  (test (op self-evaluating?) (reg exp))
+  (branch (label ev-self-eval))
+  (test (op variable?) (reg exp))
+  (branch (label ev-variable))
+  (test (op quoted?) (reg exp))
+  (branch (label ev-quoted))
+  (test (op assignment?) (reg exp))
+  (branch (label ev-assignment))
+  (test (op definition?) (reg exp))
+  (branch (label ev-definition))
+  (test (op if?) (reg exp))
+  (branch (label ev-if))
+  (test (op lambda?) (reg exp))
+  (branch (label ev-lambda))
+  (test (op begin?) (reg exp))
+  (branch (label ev-begin))
+  (test (op cond?) (reg exp)) ; NEW
+  (branch (label ev-cond)) ; NEW
+  (test (op let?) (reg exp)) ; NEW
+  (branch (label ev-let)) ; NEW
+  (test (op application?) (reg exp))
+  (branch (label ev-application))
+  (goto (label unknown-expression-type))))
+
 (define the-global-environment (setup-environment))
 
 (define (run-it)
   (start extended-eceval)
   (get-register-contents extended-eceval 'val))
-
-(define (exit? exp)
-  (eof-object? exp))
 
 ; FROM EXERCISE 4.6
 
