@@ -223,3 +223,436 @@ apply-dispatch
 		  (+ (g (+ x 2)) x)))
 
 (pretty-print-code (statements (compile f-code 'val 'next)))
+
+; Exercise 5.36 ------------------------------------------------------------------
+
+; It is right-to-left order, and that is determined by construct-arglist. The
+; first line in the procedure reverses the list of operands and then emits the
+; compiled code from left-to-right.
+
+; This version of construct-arglist would generate code that evaluates in
+; left-to-right order:
+
+;; (define (construct-arglist operand-codes)
+;;   (if (null? operand-codes)
+;;       (make-instruction-sequence '() '(argl)
+;; 				 '((assign argl (const ()))))
+;;       (let ((code-to-get-last-arg
+;; 	     (append-instruction-sequences
+;; 	      (car operand-codes)
+;; 	      (make-instruction-sequence '(val) '(argl)
+;; 					 '((assign argl (op list) (reg val)))))))
+;; 	(if (null? (cdr operand-codes))
+;; 	    code-to-get-last-arg
+;; 	    (preserving '(env)
+;; 			code-to-get-last-arg
+;; 			(code-to-get-rest-args
+;; 			 (cdr operand-codes)))))))
+
+;; (pretty-print-code (statements (compile '(+ 1 2 3) 'val 'next)))
+
+; Exercise 5.37 ------------------------------------------------------------------
+
+; With optimized preserving:
+
+;; (pretty-print-code (statements (compile '(+ 1 2 3) 'val 'next)))
+
+;;   (assign proc (op lookup-variable-value) (const +) (reg env))
+;;   (assign val (const 3))
+;;   (assign argl (op list) (reg val))
+;;   (assign val (const 2))
+;;   (assign argl (op cons) (reg val) (reg argl))
+;;   (assign val (const 1))
+;;   (assign argl (op cons) (reg val) (reg argl))
+;;   (test (op primitive-procedure?) (reg proc))
+;;   (branch (label primitive-branch70))
+;; compiled-branch69
+;;   (assign continue (label after-call68))
+;;   (assign val (op compiled-procedure-entry) (reg proc))
+;;   (goto (reg val))
+;; primitive-branch70
+;;   (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+;; after-call68
+
+; Without optimized preserving:
+
+;; (define (preserving regs seq1 seq2)
+;;   (if (null? regs)
+;;       (append-instruction-sequences seq1 seq2)
+;;       (let ((first-reg (car regs)))
+;; 	(preserving (cdr regs)
+;; 		    (make-instruction-sequence
+;; 		     (list-union (list first-reg)
+;; 				 (registers-needed seq1))
+;; 		     (list-difference (registers-modified seq1)
+;; 				      (list first-reg))
+;; 		     (append `((save ,first-reg))
+;; 			     (statements seq1)
+;; 			     `((restore ,first-reg))))
+;; 		    seq2))))
+
+;; (pretty-print-code (statements (compile '(+ 1 2 3) 'val 'next)))
+
+;;   (save continue)
+;;   (save env)
+;;   (save continue)
+;;   (assign proc (op lookup-variable-value) (const +) (reg env))
+;;   (restore continue)
+;;   (restore env)
+;;   (restore continue)
+;;   (save continue)
+;;   (save proc)
+;;   (save env)
+;;   (save continue)
+;;   (assign val (const 3))
+;;   (restore continue)
+;;   (assign argl (op list) (reg val))
+;;   (restore env)
+;;   (save env)
+;;   (save argl)
+;;   (save continue)
+;;   (assign val (const 2))
+;;   (restore continue)
+;;   (restore argl)
+;;   (assign argl (op cons) (reg val) (reg argl))
+;;   (restore env)
+;;   (save argl)
+;;   (save continue)
+;;   (assign val (const 1))
+;;   (restore continue)
+;;   (restore argl)
+;;   (assign argl (op cons) (reg val) (reg argl))
+;;   (restore proc)
+;;   (restore continue)
+;;   (test (op primitive-procedure?) (reg proc))
+;;   (branch (label primitive-branch70))
+;; compiled-branch69
+;;   (assign continue (label after-call68))
+;;   (assign val (op compiled-procedure-entry) (reg proc))
+;;   (goto (reg val))
+;; primitive-branch70
+;;   (save continue)
+;;   (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+;;   (restore continue)
+;; after-call68
+;; ;Unspecified return value
+
+; In this example, all the saves and restores are unnecessary. So 13 saves and
+; restores.
+
+; Exercise 5.38 ------------------------------------------------------------------
+
+; a.
+
+(define (spread-arguments operand-list)
+  (map (lambda (op reg) (compile op reg 'next))
+       operand-list
+       '(arg1 arg2)))
+
+; b.
+
+(define (compile exp target linkage)
+  (cond ((self-evaluating? exp)
+         (compile-self-evaluating exp target linkage))
+        ((quoted? exp) (compile-quoted exp target linkage))
+        ((variable? exp)
+         (compile-variable exp target linkage))
+        ((assignment? exp)
+         (compile-assignment exp target linkage))
+        ((definition? exp)
+         (compile-definition exp target linkage))
+        ((if? exp) (compile-if exp target linkage))
+        ((lambda? exp) (compile-lambda exp target linkage))
+        ((begin? exp)
+         (compile-sequence (begin-actions exp)
+                           target
+                           linkage))
+        ((cond? exp) (compile (cond->if exp) target linkage))
+	((open-code-primitive? exp) ; NEW
+	 (dispatch-to-open-code-primitive exp target linkage)) ; NEW
+        ((application? exp)
+         (compile-application exp target linkage))
+        (else
+         (error "Unknown expression type -- COMPILE" exp))))
+
+(define (open-code-primitive? exp)
+  (and (pair? exp)
+       (memq (operator exp) '(= * - +))))
+
+(define (dispatch-to-open-code-primitive exp target linkage)
+  (end-with-linkage
+   linkage
+   (compile-open-code-primitive (operator exp) (operands exp) target)))
+
+(define (compile-open-code-primitive op operands target)
+  (let ((args (spread-arguments operands)))
+    (append-instruction-sequences
+     (car args)
+     (preserving '(arg1)
+		 (cadr args)
+		 (make-instruction-sequence
+		  '(arg1 arg2)
+		  (list target)
+		  `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))
+
+; c.
+
+(pretty-print-code (statements (compile
+				'(define (factorial n)
+				   (if (= n 1) 1
+				       (* (factorial (- n 1)) n)))
+				'val
+				'next)))
+
+;; Yep, the output is significantly shorter. It doesn't have the
+; compiled procedure branches of the original.
+
+(pretty-print-code (statements (compile '(+ 8 (+ 3 5)) 'val 'next)))
+;; (assign arg1 (const 8))
+;; (save arg1)
+;; (assign arg1 (const 3))
+;; (assign arg2 (const 5))
+;; (assign arg2 (op +) (reg arg1) (reg arg2))
+;; (restore arg1)
+;; (assign val (op +) (reg arg1) (reg arg2))
+
+; d.
+
+(define (handles-n-args? op)
+  (memq op '(* +)))
+
+(define (dispatch-to-open-code-primitive exp target linkage)
+  (let ((op (operator exp))
+	(args (operands exp)))
+    (end-with-linkage
+     linkage
+     (compile-open-code-primitive op (expand-args op args) target))))
+
+(define (two-remaining? args)
+  (= (length args) 2))
+
+(define (expand-args op args)
+  (if (not (handles-n-args? op)) args
+      (if (two-remaining? args) args
+	  (cons (car args)
+		(list (cons op (expand-args op (cdr args))))))))
+
+(expand-args '+ '(3 4 5)) ; (3 (+ 4 5))
+(expand-args '+ '(2 3 5 8 13 21)) ; (2 (+ 3 (+ 5 (+ 8 (+ 13 21)))))
+
+(pretty-print-code (statements (compile '(+ 8 9 10 11 12 13) 'val 'next)))
+;; (assign arg1 (const 8))
+;; (save arg1)
+;; (assign arg1 (const 9))
+;; (save arg1)
+;; (assign arg1 (const 10))
+;; (save arg1)
+;; (assign arg1 (const 11))
+;; (save arg1)
+;; (assign arg1 (const 12))
+;; (assign arg2 (const 13))
+;; (assign arg2 (op +) (reg arg1) (reg arg2))
+;; (restore arg1)
+;; (assign arg2 (op +) (reg arg1) (reg arg2))
+;; (restore arg1)
+;; (assign arg2 (op +) (reg arg1) (reg arg2))
+;; (restore arg1)
+;; (assign arg2 (op +) (reg arg1) (reg arg2))
+;; (restore arg1)
+;; (assign val (op +) (reg arg1) (reg arg2))
+
+; Exercise 5.39 ------------------------------------------------------------------
+
+(define (make-address x y) (cons x y))
+(define (frames-offset a) (car a))
+(define (vars-offset a) (cdr a))
+
+(define (scan-frames address env proc)
+  (let ((x (frames-offset address))
+	(y (vars-offset address)))
+    (if (= 0 x)
+	(proc y (first-frame env))
+	(scan-frames (make-address (- x 1) y)
+		     (enclosing-environment env)
+		     proc))))
+
+(define (lexical-address-lookup address env)
+  (scan-frames address env get-value-or-die))
+
+(define (get-value-or-die index frame)
+  (let ((value (list-ref (frame-values frame) index)))
+    (if (eq? value '*unassigned*)
+	(error "Unassigned variable!")
+	value)))
+
+(define (lexical-address-set! address env value)
+  (define (list-from n l)
+    (if (= n 0) l
+	(list-from (- n 1) (cdr l))))
+  (scan-frames address env
+	       (lambda (index frame)
+		 (set-car! (list-from index (frame-values frame))
+			   value))))
+
+(define test-env
+  (extend-environment '(a b c) '(1 2 3)
+      (extend-environment '(e f g) '(4 5 6)
+	  (extend-environment '(h i j k l) '(7 8 9 10 11)
+	      (extend-environment '(m n o p) '(12 *unassigned* 13 14)
+		  the-empty-environment)))))
+
+(lexical-address-lookup (make-address 2 2) test-env) ; 9
+;; (lexical-address-lookup (make-address 3 1) test-env) ; Unassigned variable!
+
+(lexical-address-set! (make-address 2 2) test-env 58)
+(lexical-address-lookup (make-address 2 2) test-env) ; 58
+
+; Exercise 5.40 ------------------------------------------------------------------
+
+(load "~/work/sicp/chapter5/env-compiler.scm")
+
+(define (compile-lambda exp target linkage env)
+  (let ((proc-entry (make-label 'entry))
+        (after-lambda (make-label 'after-lambda)))
+    (let ((lambda-linkage
+           (if (eq? linkage 'next) after-lambda linkage)))
+      (append-instruction-sequences
+       (tack-on-instruction-sequence
+        (end-with-linkage lambda-linkage
+         (make-instruction-sequence '(env) (list target)
+          `((assign ,target
+                    (op make-compiled-procedure)
+                    (label ,proc-entry)
+                    (reg env))))
+	 env)
+        (compile-lambda-body exp proc-entry env))
+       after-lambda))))
+
+(define (compile-lambda-body exp proc-entry env)
+  (let ((formals (lambda-parameters exp)))
+    (append-instruction-sequences
+     (make-instruction-sequence '(env proc argl) '(env)
+      `(,proc-entry
+        (assign env (op compiled-procedure-env) (reg proc))
+        (assign env
+                (op extend-environment)
+                (const ,formals)
+                (reg argl)
+                (reg env))))
+     (compile-sequence (lambda-body exp) 'val 'return
+		       (cons formals env))))) ; <-- NEW
+
+(pretty-print-code (statements (compile
+				'(define (factorial n)
+				   (if (= n 1)
+				       1
+				       (* (factorial (- n 1)) n)))
+				'val
+				'next
+				the-empty-environment)))
+
+; Exercise 5.41 ------------------------------------------------------------------
+
+(define (find-variable var env)
+  (define (move-right address)
+    (make-address (frames-offset address)
+		  (+ 1 (vars-offset address))))
+  (define (move-up address)
+    (make-address (+ 1 (frames-offset address))
+		  (vars-offset address)))
+  (define (scan-env address env)
+    (define (scan-vars vars vars-address)
+      (cond ((null? vars) (scan-env (move-up address) (cdr env)))
+	    ((eq? (car vars) var) vars-address)
+	    (else (scan-vars (cdr vars) (move-right vars-address)))))
+    (if (null? env)
+	'not-found
+	(scan-vars (car env) address)))
+  (scan-env (make-address 0 0) env))
+
+(find-variable 'c '((y z) (a b c d e) (x y))) ; (1 . 2)
+(find-variable 'x '((y z) (a b c d e) (x y))) ; (2 . 0)
+(find-variable 'w '((y z) (a b c d e) (x y))) ; not-found
+
+; Exercise 5.42 ------------------------------------------------------------------
+
+(define (compile-variable exp target linkage env)
+  (define (instructions-for-global-env)
+    (make-instruction-sequence '(env) (list target env)
+       `((save env) ; NOTE: This save/restore pair might be superfluous...
+	 (assign env (op get-global-environment))
+	 (assign ,target (op lookup-variable-value) (const ,exp) (reg env))
+	 (restore env))))
+  (define (instructions-for-lexical-address)
+    (make-instruction-sequence '(env) (list target env)
+       `((assign ,target (op lexical-address-lookup) (const ,exp) (reg env)))))
+
+  (let ((address (find-variable exp env)))
+    (end-with-linkage linkage
+      (if (eq? address 'not-found)
+	  (instructions-for-global-env)
+	  (instructions-for-lexical-address))
+      env)))
+
+(define (compile-assignment exp target linkage env)
+  (let* ((var (assignment-variable exp))
+	 (get-value-code (compile (assignment-value exp) 'val 'next env))
+	 (address (find-variable var env)))
+    (define (instructions-for-global-env)
+      (make-instruction-sequence '(env val) (list target env)
+	 `((save env) ; NOTE: This save/restore pair might be superfluous...
+	   (assign env (op get-global-environment))
+	   (perform (op set-variable-value!)
+		    (const ,var)
+		    (reg val)
+		    (reg env))
+	   (restore env)
+	   (assign ,target (const ok)))))
+    (define (instructions-for-lexical-address)
+      (make-instruction-sequence '(env val) (list target)
+	 `((perform (op lexical-address-set!)
+		    (const ,var)
+		    (reg val)
+		    (reg env))
+	   (assign ,target (const ok)))))
+
+    (end-with-linkage linkage
+     (preserving '(env)
+      get-value-code
+      (if (eq? address 'not-found)
+	  (instructions-for-global-env)
+	  (instructions-for-lexical-address)))
+     env)))
+
+(define (compile-and-print exp)
+  (pretty-print-code
+   (statements
+    (compile exp 'val 'next the-global-environment))))
+
+(compile-and-print 'x)
+;; (save env)
+;; (assign env (op get-global-environment))
+;; (assign val (op lookup-variable-value) (const x) (reg env))
+;; (restore env)
+
+(compile-and-print '(set! x 144))
+;; (assign val (const 144))
+;; (save env)
+;; (assign env (op get-global-environment))
+;; (perform (op set-variable-value!) (const x) (reg val) (reg env))
+;; (restore env)
+;; (assign val (const ok))
+
+(compile-and-print '(let ((x 3) (y 4))
+		      (lambda (a b c d e)
+			(let ((y (* a b x))
+			      (z (+ c d x)))
+			  (* x y z)))))
+
+(compile-and-print '((lambda (x y)
+		       (lambda (a b c d e)
+			 ((lambda (y z) (* x y z))
+			  (* a b x)
+			  (+ c d x))))
+		     3
+		     4))
