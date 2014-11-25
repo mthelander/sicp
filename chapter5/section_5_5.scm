@@ -656,3 +656,49 @@ apply-dispatch
 			  (+ c d x))))
 		     3
 		     4))
+
+; Exercise 5.43 ------------------------------------------------------------------
+
+(define (scan-out-defines body)
+  (let ((defines (filter definition? body)))
+    (if (null? defines)
+	body
+	(let ((vars-and-values (map (lambda (d)
+				      (list (definition-variable d)
+					    ''*unassigned*))
+				    defines)))
+	  `(let ,vars-and-values
+	     (begin ,@(map (lambda (d)
+	  		    (list 'set! (definition-variable d)
+	  			  (definition-value d)))
+	  		  defines))
+	     ,@(remove definition? body))))))
+
+(define (definition-value exp)
+  (if (symbol? (cadr exp))
+      (caddr exp)
+      (make-lambda (cdadr exp)
+		   (scan-out-defines (cddr exp)))))
+
+(scan-out-defines '((define u (+ 1 2 3))
+		    (define v (* 1 2 3))
+		    (+ u v)
+		    (* u v)))
+;; (let ((u (quote *unassigned*))
+;;       (v (quote *unassigned*)))
+;;   (begin (set! u (+ 1 2 3))
+;; 	 (set! v (* 1 2 3)))
+;;   (+ u v)
+;;   (* u v))
+
+(scan-out-defines '((define u (+ 1 2 3))))
+;; (let ((u (quote *unassigned*)))
+;;   (begin (set! u (+ 1 2 3))))
+
+(compile-and-print '(define (foobar a b)
+		      (define u (+ 5 8))
+		      (define v (* 13 21))
+		      (+ u v)))
+
+; Looks legit.
+
