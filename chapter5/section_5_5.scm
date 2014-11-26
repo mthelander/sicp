@@ -674,11 +674,18 @@ apply-dispatch
 	  		  defines))
 	     ,@(remove definition? body))))))
 
-(define (definition-value exp)
-  (if (symbol? (cadr exp))
-      (caddr exp)
-      (make-lambda (cdadr exp)
-		   (scan-out-defines (cddr exp)))))
+(define (compile-lambda-body exp proc-entry env)
+  (let ((formals (lambda-parameters exp)))
+    (append-instruction-sequences
+     (make-instruction-sequence '(env proc argl) '(env)
+      `(,proc-entry
+        (assign env (op compiled-procedure-env) (reg proc))
+        (assign env
+                (op extend-environment)
+                (const ,formals)
+                (reg argl)
+                (reg env))))
+     (compile-sequence (scan-out-defines (lambda-body exp)) 'val 'return env)))) ; NEW
 
 (scan-out-defines '((define u (+ 1 2 3))
 		    (define v (* 1 2 3))
@@ -702,3 +709,67 @@ apply-dispatch
 
 ; Looks legit.
 
+; Exercise 5.44 ------------------------------------------------------------------
+
+(define (open-code-primitive? exp env)
+  (and (pair? exp)
+       (eq? 'not-found (find-variable exp env)) ; NEW
+       (memq (operator exp) '(= * - +))))
+
+; Changes the open-coded exercise to use env:
+
+(define (compile exp target linkage env)
+  (cond ((self-evaluating? exp)
+         (compile-self-evaluating exp target linkage env))
+        ((quoted? exp) (compile-quoted exp target linkage env))
+        ((variable? exp)
+         (compile-variable exp target linkage env))
+        ((assignment? exp)
+         (compile-assignment exp target linkage env))
+        ((definition? exp)
+         (compile-definition exp target linkage env))
+        ((if? exp) (compile-if exp target linkage env))
+        ((lambda? exp) (compile-lambda exp target linkage env))
+        ((begin? exp)
+         (compile-sequence (begin-actions exp)
+                           target
+                           linkage
+			   env))
+        ((cond? exp) (compile (cond->if exp) target linkage env))
+	((open-code-primitive? exp env) ; NEW
+	 (dispatch-to-open-code-primitive exp target linkage env)) ; NEW
+        ((application? exp)
+         (compile-application exp target linkage env))
+        (else
+         (error "Unknown expression type -- COMPILE" exp))))
+
+
+(define (spread-arguments operand-list env)
+  (map (lambda (op reg) (compile op reg 'next env))
+       operand-list
+       '(arg1 arg2)))
+
+(define (compile-open-code-primitive op operands target env)
+  (let ((args (spread-arguments operands env)))
+    (append-instruction-sequences
+     (car args)
+     (preserving '(arg1)
+		 (cadr args)
+		 (make-instruction-sequence
+		  '(arg1 arg2)
+		  (list target)
+		  `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))
+
+(define (dispatch-to-open-code-primitive exp target linkage env)
+  (let ((op (operator exp))
+	(args (operands exp)))
+    (end-with-linkage
+     linkage
+     (compile-open-code-primitive op (expand-args op args) target env)
+     env)))
+
+; End
+
+(compile-and-print '((lambda (+ * a b x y)
+		       (+ (* a x) (* b y)))
+		     matrix-+ matrix-* 1 2 3 4))
