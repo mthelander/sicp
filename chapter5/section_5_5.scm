@@ -195,7 +195,7 @@ apply-dispatch
 ;;   (assign val (op compiled-procedure-entry) (reg proc))
 ;;   (goto (reg val)
 
-; poc contains a reference to the iter function, and the evaluator simply
+; proc contains a reference to the iter function, and the evaluator simply
 ; jumps to the next iteration, without having to add to the continue stack.
 
 ; Contrast that with the code for the recursive version:
