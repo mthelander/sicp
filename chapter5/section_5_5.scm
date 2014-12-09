@@ -127,6 +127,13 @@ apply-dispatch
 
 ; Exercise 5.33 ------------------------------------------------------------------
 
+(define (pretty-print-code code)
+  (for-each (lambda (el)
+  	      (if (pair? el) (display "  "))
+  	      (display el)
+  	      (newline))
+  	    code))
+
 (pretty-print-code (statements (compile
 				'(define (factorial n)
 				   (if (= n 1)
@@ -134,13 +141,6 @@ apply-dispatch
 				       (* (factorial (- n 1)) n)))
 				'val
 				'next)))
-
-(define (pretty-print-code code)
-  (for-each (lambda (el)
-  	      (if (pair? el) (display "  "))
-  	      (display el)
-  	      (newline))
-  	    code))
 
 (define factorial-alt-code (compile '(define (factorial-alt n)
 				       (if (= n 1) 1
@@ -743,7 +743,6 @@ apply-dispatch
         (else
          (error "Unknown expression type -- COMPILE" exp))))
 
-
 (define (spread-arguments operand-list env)
   (map (lambda (op reg) (compile op reg 'next env))
        operand-list
@@ -773,3 +772,193 @@ apply-dispatch
 (compile-and-print '((lambda (+ * a b x y)
 		       (+ (* a x) (* b y)))
 		     matrix-+ matrix-* 1 2 3 4))
+
+; Section 5.5.7 ------------------------------------------------------------------
+
+(load "~/work/sicp/from_book/ch5-compiler.scm")
+(load "~/work/sicp/from_book/load-eceval-compiler.scm")
+
+; Exercise 5.45 ------------------------------------------------------------------
+
+; a.
+
+(define (compile-and-go-factorial)
+  (compile-and-go '(define (factorial n)
+		     (if (= n 1) 1
+			 (* (factorial (- n 1)) n)))))
+
+(with-input-from-string "(factorial 3)" compile-and-go-factorial)
+; (total-pushes = 19 maximum-depth = 8)
+(with-input-from-string "(factorial 4)" compile-and-go-factorial)
+; (total-pushes = 25 maximum-depth = 11)
+(with-input-from-string "(factorial 5)" compile-and-go-factorial)
+; (total-pushes = 31 maximum-depth = 14)
+(with-input-from-string "(factorial 6)" compile-and-go-factorial)
+; (total-pushes = 37 maximum-depth = 17)
+
+; Total pushes: 6n+1
+; Maximum depth: 3n-1
+
+; Proof:
+
+(map (lambda (n) (+ (* 6 n) 1)) '(3 4 5 6)) ; (19 25 31 37)
+(map (lambda (n) (- (* 3 n) 1)) '(3 4 5 6)) ; (8 11 14 17)
+
+; Compiled / iterative:
+
+; Total pushes:
+
+; lim (6n+1)/(16(2n-1))
+; n->inf
+; Both numerator and denominator approach inf, so this is an indeterminate
+; form. Therefore, we can use L'Hopital's rule to determine the limit:
+; lim f(x) / g(x) = lim f'(x) / g'(x)
+; n->inf            n->inf
+
+; (6n+1)/(16(2n-1))
+; = (d/dn)(6n+1)/(d/dn)(16(2n-1))
+; = 6/32
+; = 0.1875
+
+; Max depth:
+
+; (3n-1)/(5n+3)
+; = (d/dn)(3n-1)/(d/dn)(5n+3)
+; = 3/5
+; = 0.6
+
+; Compiled / special purpose:
+
+; (6n+1)/(2(n-1))
+; = (d/dn)(6n+1)/(d/dn)(2(n-1))
+; = 6/2
+; = 3
+
+; (3n-1)/(2(n-1))
+; = (d/dn)(3n-1)/(d/dn)(2(n-1))
+; = 3/2
+; = 1.5
+
+; Looking at these numbers, it looks like the compiled version of the code
+; is significantly more efficient than the interpreted version, and the
+; special purpose is also significantly more efficient than the compiled
+; version.
+
+; b.
+
+; The special purpose factorial machine doesn't use the environment at all, which
+; allows it to be significantly faster. It doesn't need to lookup the variables,
+; it just has a dedicated register for each. Some of this cost could be mitigated
+; with the compile-environment that we implemented in 5.42, and the open-coded
+; primitives in 5.44.
+
+; Exercise 5.46 ------------------------------------------------------------------
+
+; Interpreted version is:
+; Max depth = 5n+3.
+; Total pushes = 56*fib(n+1)-40.
+
+(define (compile-and-go-fib)
+  (compile-and-go '(define (fib n)
+		     (if (< n 2) n
+			 (+ (fib (- n 1)) (fib (- n 2)))))))
+
+(with-input-from-string "(fib 3)" compile-and-go-fib)
+; (total-pushes = 27 maximum-depth = 8)
+(with-input-from-string "(fib 4)" compile-and-go-fib)
+; (total-pushes = 47 maximum-depth = 11)
+(with-input-from-string "(fib 5)" compile-and-go-fib)
+; (total-pushes = 77 maximum-depth = 14)
+(with-input-from-string "(fib 6)" compile-and-go-fib)
+; (total-pushes = 127 maximum-depth = 17)
+(with-input-from-string "(fib 7)" compile-and-go-fib)
+; (total-pushes = 207 maximum-depth = 20)
+
+; Total pushes:
+; 10*fib(n+1)-3
+
+(define (fib n)
+  (if (< n 2) n
+      (+ (fib (- n 1)) (fib (- n 2)))))
+
+(define (stack-compiled n)
+  (- (* 10 (fib (+ n 1))) 1))
+(map stack-compiled '(3 4 5 6 7)) ; (29 49 79 129 209)
+
+; Max depth:
+; 3n-1
+
+(map (lambda (n) (- (* 3 n) 1)) '(3 4 5 6 7)) ; (8 11 14 17 20)
+
+; Compiled / interpreted:
+
+; Max depth: 3n-1/5n+3
+; = (d/dn)(3n-1)/(d/dn)(5n+3)
+; = 3/5 = 0.60
+
+; Total pushes: S(n)=(10*fib(n+1)-3)/(56*fib(n+1)-40)
+
+(define (stack-interpreted n)
+  (- (* 56 (fib (+ n 1))) 40))
+
+(define (ratio n)
+  (* 1.0 (/ (stack-compiled n)
+	    (stack-interpreted n))))
+
+(map ratio '(3 4 5 6)) ; (.2265625 .20416666666666666 .19362745098039216 .1875)
+
+; It looks like the compiled version is a bit more efficient than the interpreted
+; one, but it appears that the difference diminishes as n gets larger.
+
+(define fibonacci-machine
+  (make-machine
+   '(n continue val)
+   (list (list '< <) (list '- -) (list '+ +))
+   '(controller
+     (assign continue (label fib-done))
+     fib-loop
+     (test (op <) (reg n) (const 2))
+     (branch (label immediate-answer))
+     ;; set up to compute Fib(n - 1)
+     (save continue)
+     (assign continue (label afterfib-n-1))
+     (save n)                           ; save old value of n
+     (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+     (goto (label fib-loop))            ; perform recursive call
+     afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+     (restore n)
+     (restore continue)
+     ;; set up to compute Fib(n - 2)
+     (assign n (op -) (reg n) (const 2))
+     (save continue)
+     (assign continue (label afterfib-n-2))
+     (save val)                         ; save Fib(n - 1)
+     (goto (label fib-loop))
+     afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+     (assign n (reg val))               ; n now contains Fib(n - 2)
+     (restore val)                      ; val now contains Fib(n - 1)
+     (restore continue)
+     (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+	     (op +) (reg val) (reg n)) 
+     (goto (reg continue))              ; return to caller, answer is in val
+     immediate-answer
+     (assign val (reg n))               ; base case:  Fib(n) = n
+     (goto (reg continue))
+     fib-done
+     (perform (op print-stack-statistics)))))
+
+(define (run-fib-machine n)
+  (set-register-contents! fibonacci-machine 'n n)
+  (start fibonacci-machine)
+  (get-register-contents fibonacci-machine 'val))
+
+(map run-fib-machine '(3 4 5 6 7 8))
+;; (total-pushes = 8 maximum-depth = 4)
+;; (total-pushes = 24 maximum-depth = 6)
+;; (total-pushes = 52 maximum-depth = 8)
+;; (total-pushes = 100 maximum-depth = 10)
+;; (total-pushes = 180 maximum-depth = 12)
+;; (total-pushes = 312 maximum-depth = 14)
+
+; Max depth: 2n-2
+; Total pushes: 2*fib(n+1) 
