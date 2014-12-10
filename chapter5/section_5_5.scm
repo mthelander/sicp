@@ -882,8 +882,8 @@ apply-dispatch
       (+ (fib (- n 1)) (fib (- n 2)))))
 
 (define (stack-compiled n)
-  (- (* 10 (fib (+ n 1))) 1))
-(map stack-compiled '(3 4 5 6 7)) ; (29 49 79 129 209)
+  (- (* 10 (fib (+ n 1))) 3))
+(map stack-compiled '(3 4 5 6 7)) ; (27 47 77 127 207)
 
 ; Max depth:
 ; 3n-1
@@ -896,16 +896,12 @@ apply-dispatch
 ; = (d/dn)(3n-1)/(d/dn)(5n+3)
 ; = 3/5 = 0.60
 
-; Total pushes: S(n)=(10*fib(n+1)-3)/(56*fib(n+1)-40)
+; Interpreted's stack depth sequence is (56*fib(n+1)-40): (128 240 408 688 1136)
 
-(define (stack-interpreted n)
-  (- (* 56 (fib (+ n 1))) 40))
-
-(define (ratio n)
-  (* 1.0 (/ (stack-compiled n)
-	    (stack-interpreted n))))
-
-(map ratio '(3 4 5 6)) ; (.2265625 .20416666666666666 .19362745098039216 .1875)
+(map (lambda (a b) (* 1.0 (/ a b)))
+     '(27 47 77 127 207)
+     '(128 240 688 1136))
+; (.2109375 .19583333333333333 .1119186046511628 .11179577464788733)
 
 ; It looks like the compiled version is a bit more efficient than the interpreted
 ; one, but it appears that the difference diminishes as n gets larger.
@@ -952,13 +948,22 @@ apply-dispatch
   (start fibonacci-machine)
   (get-register-contents fibonacci-machine 'val))
 
-(map run-fib-machine '(3 4 5 6 7 8))
+(map run-fib-machine '(3 4 5 6 7))
 ;; (total-pushes = 8 maximum-depth = 4)
 ;; (total-pushes = 24 maximum-depth = 6)
 ;; (total-pushes = 52 maximum-depth = 8)
 ;; (total-pushes = 100 maximum-depth = 10)
 ;; (total-pushes = 180 maximum-depth = 12)
-;; (total-pushes = 312 maximum-depth = 14)
 
-; Max depth: 2n-2
-; Total pushes: 2*fib(n+1) 
+; Special purpose sequence: (8 24 52 100 180 312)
+
+(map (lambda (a b) (* 1.0 (/ a b)))
+     '(27 47 77 127 207)
+     '(8 24 52 100 180))
+; (3.375 1.9583333333333333 1.4807692307692308 1.27 1.15)
+
+; The special purpose fibonacci machine is indeed faster. But again, the
+; difference appears to diminish as n gets larger.
+
+; Exercise 5.47 ------------------------------------------------------------------
+
