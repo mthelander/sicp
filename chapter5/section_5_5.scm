@@ -967,3 +967,99 @@ apply-dispatch
 
 ; Exercise 5.47 ------------------------------------------------------------------
 
+(define (compile-procedure-call target linkage)
+  (let ((primitive-branch (make-label 'primitive-branch))
+        (compiled-branch (make-label 'compiled-branch))
+	(compound-branch (make-label 'compound-branch)) ; NEW
+        (after-call (make-label 'after-call)))
+    (let ((compiled-linkage
+           (if (eq? linkage 'next) after-call linkage)))
+      (append-instruction-sequences
+       (make-instruction-sequence '(proc) '()
+        `((test (op primitive-procedure?) (reg proc))
+          (branch (label ,primitive-branch))
+	  (test (op compound-procedure?) (reg proc)) ; NEW
+	  (branch (label ,compound-branch)))) ; NEW
+       (parallel-instruction-sequences
+        (parallel-instruction-sequences ; NEW
+	 (append-instruction-sequences
+	  compiled-branch
+	  (compile-proc-appl target compiled-linkage))
+	 (append-instruction-sequences ; NEW
+	  compound-branch ; NEW
+	  (compile-compound-proc-appl target compiled-linkage))); NEW
+        (append-instruction-sequences
+         primitive-branch
+         (end-with-linkage linkage
+          (make-instruction-sequence '(proc argl)
+                                     (list target)
+           `((assign ,target
+                     (op apply-primitive-procedure)
+                     (reg proc)
+                     (reg argl)))))))
+       after-call))))
+
+(define (compile-compound-proc-appl target linkage)
+  (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
+         (make-instruction-sequence '(proc) all-regs
+           `((assign continue (label ,linkage))
+	     (save continue)
+	     (goto (reg compapp)))))
+        ((and (not (eq? target 'val))
+              (not (eq? linkage 'return)))
+         (let ((proc-return (make-label 'proc-return)))
+           (make-instruction-sequence '(proc) all-regs
+            `((assign continue (label ,proc-return))
+	      (save continue)
+	      (goto (reg compapp))
+              ,proc-return
+              (assign ,target (reg val))
+              (goto (label ,linkage))))))
+        ((and (eq? target 'val) (eq? linkage 'return))
+         (make-instruction-sequence '(proc continue) all-regs
+	  '((save continue)
+	    (goto (reg compapp)))))
+        ((and (not (eq? target 'val)) (eq? linkage 'return))
+         (error "return linkage, target not val -- COMPILE-COMPOUND"
+                target))))
+
+(define (compile-and-go-code)
+  (compile-and-go '(define (f n)
+		     (g (* n n)))))
+
+(with-input-from-string "(define (g n) (+ 1 n)) (f 3)" compile-and-go-code) ; 10
+
+; Exercise 5.48 ------------------------------------------------------------------
+
+(load "~/work/sicp/chapter5/5_48_eceval_body")
+
+(define (compile-and-run expression)
+  (pp expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile expression 'val 'return))
+                   5_48_eceval)))
+    (set-register-contents! 5_48_eceval 'val instructions)
+    (set-register-contents! 5_48_eceval 'flag true)
+    'ok))
+
+(define 5_48_eceval
+  (make-machine
+   '(exp env val proc argl continue unev compapp)
+   (append eceval-operations
+	   `((compile-and-run ,compile-and-run)))
+   (5_48_eceval_body)))
+
+(define (start_5_48_eceval)
+  (set! the-global-environment (setup-environment))
+  (set-register-contents! 5_48_eceval 'flag false)
+  (start 5_48_eceval))
+
+(define factorial-code
+  "(compile-and-run '(define (factorial n)
+		       (if (= n 1) 1
+			   (* n (factorial (- n 1))))))")
+
+;; (with-input-from-string
+;;     (string-append factorial-code " (factorial 3)")
+;;     start_5_48_eceval)
