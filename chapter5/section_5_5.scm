@@ -1034,32 +1034,64 @@ apply-dispatch
 (load "~/work/sicp/chapter5/5_48_eceval_body")
 
 (define (compile-and-run expression)
-  (pp expression)
   (let ((instructions
          (assemble (statements
-                    (compile expression 'val 'return))
+		    (compile expression 'val 'return))
                    5_48_eceval)))
-    (set-register-contents! 5_48_eceval 'val instructions)
     (set-register-contents! 5_48_eceval 'flag true)
-    'ok))
+    (make-compiled-instructions instructions)))
+
+(define (make-compiled-instructions instructions)
+  (list 'compiled-instructions instructions))
+(define (compiled-instructions-instructions exp)
+  (cadr exp))
+(define (is-compiled-instructions? exp)
+  (tagged-list? exp 'compiled-instructions))
+
+(define primitive-procedures
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '= =)
+	(list '/ /)
+	(list '> >)
+	(list '< <)
+	(list 'compile-and-run compile-and-run)))
 
 (define 5_48_eceval
   (make-machine
    '(exp env val proc argl continue unev compapp)
    (append eceval-operations
-	   `((compile-and-run ,compile-and-run)))
+	   `((is-compiled-instructions? ,is-compiled-instructions?)
+	     (compiled-instructions-instructions ,compiled-instructions-instructions)))
    (5_48_eceval_body)))
 
+(define the-global-environment (setup-environment))
+ 
 (define (start_5_48_eceval)
-  (set! the-global-environment (setup-environment))
-  (set-register-contents! 5_48_eceval 'flag false)
-  (start 5_48_eceval))
+    (set-register-contents! 5_48_eceval 'flag false)
+    (start 5_48_eceval))
 
 (define factorial-code
   "(compile-and-run '(define (factorial n)
 		       (if (= n 1) 1
-			   (* n (factorial (- n 1))))))")
+			   (* n (factorial (- n 1))))))
+   (factorial 3)")
 
-;; (with-input-from-string
-;;     (string-append factorial-code " (factorial 3)")
-;;     start_5_48_eceval)
+(with-input-from-string factorial-code start_5_48_eceval)
+;; (total-pushes = 5 maximum-depth = 3)
+;; ;;; EC-Eval value:
+;; ok
+
+;; ;;; EC-Eval input:
+
+;; (total-pushes = 19 maximum-depth = 8)
+;; ;;; EC-Eval value:
+;; 6
+
+;; ;;; EC-Eval input:
+;; ;Value: done

@@ -1,10 +1,7 @@
 (define (5_48_eceval_body)
   '(
   (assign compapp (label compound-apply))
-  (branch (label external-entry)) ; Moved inside repl
 read-eval-print-loop
-(perform (op user-print) (const repl))
-
   (perform (op initialize-stack))
   (perform
    (op prompt-for-input) (const ";;; EC-Eval input:"))
@@ -22,7 +19,6 @@ print-result
   (goto (label read-eval-print-loop))
 
 external-entry
-(perform (op user-print) (const "in external-entry"))
   (perform (op initialize-stack))
   (assign env (op get-global-environment))
   (assign continue (label print-result))
@@ -132,13 +128,19 @@ compiled-apply
   (restore continue)
   (assign val (op compiled-procedure-entry) (reg proc))
   (goto (reg val))
-
+  
 primitive-apply
   (assign val (op apply-primitive-procedure)
               (reg proc)
               (reg argl))
+  (test (op is-compiled-instructions?) (reg val)) ; NEW
+  (branch (label handle-compiled-instructions)) ; NEW
   (restore continue)
   (goto (reg continue))
+handle-compiled-instructions ; NEW
+  (assign val (op compiled-instructions-instructions) (reg val))
+  (restore continue)
+  (goto (reg val)) ; NEW
 
 compound-apply
   (assign unev (op procedure-parameters) (reg proc))
@@ -223,5 +225,4 @@ ev-definition-1
    (op define-variable!) (reg unev) (reg val) (reg env))
   (assign val (const ok))
   (goto (reg continue))
-end-of-eval
-   ))
+end-of-eval))
