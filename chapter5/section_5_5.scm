@@ -1095,3 +1095,91 @@ apply-dispatch
 
 ;; ;;; EC-Eval input:
 ;; ;Value: done
+
+; Exercise 5.49 ------------------------------------------------------------------
+
+(define 5_49_eceval
+  (make-machine
+   '(exp env val proc argl continue unev compapp)
+   (append eceval-operations
+	   `((compile ,compile)
+	     (statements ,statements)
+	     (assemble ,(lambda (insts)
+			  (assemble insts 5_49_eceval)))))
+   '(rcep-loop
+      (perform (op initialize-stack))
+      (perform (op prompt-for-input) (const ";;; EC-Eval input:"))
+      (assign exp (op read))
+      (test (op eof-object?) (reg exp))
+      (branch (label end-of-rcep))
+      (assign env (op get-global-environment))
+      (assign val (op compile) (reg exp) (const val) (const return))
+      (assign val (op statements) (reg val))
+      (assign val (op assemble) (reg val))
+      (assign continue (label print-result))
+      (goto (reg val))
+    print-result
+      (perform (op print-stack-statistics))
+      (perform (op announce-output) (const ";;; EC-Eval value:"))
+      (perform (op user-print) (reg val))
+      (goto (label rcep-loop))
+     end-of-rcep)))
+
+(define the-global-environment (setup-environment))
+ 
+(define (start_5_49_eceval)
+    (set-register-contents! 5_49_eceval 'flag false)
+    (start 5_49_eceval))
+
+(with-input-from-string
+    "(define (inc n) (+ n 1)) (inc 5)"
+    start_5_49_eceval)
+
+;; ;;; EC-Eval input:
+;; (total-pushes = 0 maximum-depth = 0)
+;; ;;; EC-Eval value:
+;; ok
+;; ;;; EC-Eval input:
+;; (total-pushes = 0 maximum-depth = 0)
+;; ;;; EC-Eval value:
+;; 6
+;; ;;; EC-Eval input:
+;; ;Value: done
+
+; Exercise 5.50 ------------------------------------------------------------------
+
+(load "~/work/sicp/chapter5/mceval-scheme.scm")
+
+(define primitive-procedures
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '= =)
+	(list '/ /)
+	(list '> >)
+	(list '< <)
+	; NEW PROCEDURES
+	(list 'apply apply)
+	(list 'list list)))
+
+(define 5_50_eceval
+  (make-machine
+   '(exp env val proc argl continue unev compapp)
+   eceval-operations
+   (append '((perform (op initialize-stack))
+	     (assign env (op get-global-environment)))
+	   (statements (compile mceval-scheme 'val 'return)))))
+
+(define the-global-environment (setup-environment))
+ 
+(define (start_5_50_eceval)
+    (set-register-contents! 5_50_eceval 'flag false)
+    (start 5_50_eceval))
+
+;; (with-input-from-string
+;;     "(define (inc n) (+ n 1)) (inc 5)"
+;;     start_5_50_eceval)
