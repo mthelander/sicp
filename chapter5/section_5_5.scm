@@ -1150,6 +1150,75 @@ apply-dispatch
 
 (load "~/work/sicp/chapter5/mceval-scheme.scm")
 
+; From exercise 4.1
+
+(define (let? exp) (tagged-list? exp 'let))
+(define (let-body exp) (cddr exp))
+(define (let-pairs exp) (cadr exp))
+(define (let-vars exp) (map car (let-pairs exp)))
+(define (let-values exp) (map cadr (let-pairs exp)))
+(define (let->combination exp)
+  (cons (cons 'lambda
+	      (cons (let-vars exp)
+		    (let-body exp)))
+	(let-values exp)))
+
+(define (sequence->exp seq)
+  (cond ((null? seq) seq)
+        ((last-exp? seq) (first-exp seq))
+        (else (make-begin seq))))
+(define (last-exp? seq) (null? (cdr seq)))
+(define (first-exp seq) (car seq))
+(define (rest-exps seq) (cdr seq))
+(define (make-begin seq) (cons 'begin seq))
+(define (cond? exp) (tagged-list? exp 'cond))
+(define (cond-clauses exp) (cdr exp))
+(define (cond-else-clause? clause)
+  (eq? (cond-predicate clause) 'else))
+(define (cond-predicate clause) (car clause))
+(define (cond-actions clause) (cdr clause))
+(define (cond->if exp)
+  (expand-clauses (cond-clauses exp)))
+(define (expand-clauses clauses)
+  (if (null? clauses)
+      'false                          ; no else clause
+      (let ((first (car clauses))
+            (rest (cdr clauses)))
+        (if (cond-else-clause? first)
+            (if (null? rest)
+                (sequence->exp (cond-actions first))
+                (error "ELSE clause isn't last -- COND->IF"
+                       clauses))
+            (make-if (cond-predicate first)
+                     (sequence->exp (cond-actions first))
+                     (expand-clauses rest))))))
+
+; /from 4.1
+
+(define (compile exp target linkage)
+  (cond ((self-evaluating? exp)
+         (compile-self-evaluating exp target linkage))
+        ((quoted? exp) (compile-quoted exp target linkage))
+        ((variable? exp)
+         (compile-variable exp target linkage))
+        ((assignment? exp)
+         (compile-assignment exp target linkage))
+        ((definition? exp)
+         (compile-definition exp target linkage))
+        ((if? exp) (compile-if exp target linkage))
+        ((lambda? exp) (compile-lambda exp target linkage))
+        ((begin? exp)
+         (compile-sequence (begin-actions exp)
+                           target
+                           linkage))
+        ((cond? exp) (compile (cond->if exp) target linkage)) ; NEW
+	((let? exp) (compile (let->combination exp) target linkage)) ; NEW
+        ((cond? exp) (compile (cond->if exp) target linkage))
+        ((application? exp)
+         (compile-application exp target linkage))
+        (else
+         (error "Unknown expression type -- COMPILE" exp))))
+
 (define primitive-procedures
   (list (list 'car car)
         (list 'cdr cdr)
@@ -1164,22 +1233,47 @@ apply-dispatch
 	(list '< <)
 	; NEW PROCEDURES
 	(list 'apply apply)
+	(list 'read read)
+	(list 'newline newline)
+	(list 'display display)
+	(list 'number? number?)
+	(list 'string? string?)
+	(list 'symbol? symbol?)
+	(list 'pair? pair?)
+	(list 'eq? eq?)
+	(list 'car car)
+	(list 'cadr cadr)
+	(list 'caddr caddr)
+	(list 'cddr cddr)
+	(list 'cdadr cdadr)
+	(list 'caadr caadr)
+	(list 'cadddr cadddr)
+	(list 'not not)
+	(list 'pp pp)
+	(list 'true true)
+	(list 'false false)
+	(list 'error error)
+	(list 'length length)
+	(list 'set-car! set-car!)
+	(list 'set-cdr! set-cdr!)
+	(list 'eof-object? eof-object?)
 	(list 'list list)))
+
+(define the-global-environment (setup-environment))
 
 (define 5_50_eceval
   (make-machine
    '(exp env val proc argl continue unev compapp)
    eceval-operations
    (append '((perform (op initialize-stack))
-	     (assign env (op get-global-environment)))
-	   (statements (compile mceval-scheme 'val 'return)))))
-
-(define the-global-environment (setup-environment))
+   	     (assign env (op get-global-environment)))
+   	   (statements (compile mceval-scheme 'val 'next)))))
  
 (define (start_5_50_eceval)
     (set-register-contents! 5_50_eceval 'flag false)
-    (start 5_50_eceval))
+    (start 5_50_eceval)
+    (get-register-contents 5_50_eceval 'val))
 
-;; (with-input-from-string
-;;     "(define (inc n) (+ n 1)) (inc 5)"
-;;     start_5_50_eceval)
+(with-input-from-string "(+ 5 8)" start_5_50_eceval) ; 13
+
+(with-input-from-string "(if true 5 8)" start_5_50_eceval) ; 5
